@@ -48,3 +48,4 @@ python run_us_cached_snapshot.py --as-of 2025-07-15 `
 - 技术价格信息只负责趋势与风险提示，不进入Q/V/M总分。
 - 尚未接入A股、港股、美股的自动数据提供器；V1先固定评分语义和审计边界。
 - 美股本地历史缓存提供器已经接入；自动补齐缺失文件仍未实现。
+- `audit_us_coverage.py`可将每个历史成分代码归类并核对总数；`update_us_cache.py`默认只做dry-run，只有显式添加 `--execute`才下载缺失文件。
