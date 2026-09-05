@@ -1,0 +1,12 @@
+# ============================================================
+# LLM 量化交易 Agent 依赖清单
+# 安装：python -m pip install -r requirements.txt
+# ============================================================
+requests>=2.31.0          # Binance 公开行情 API
+pandas>=2.0.0             # 数据处理与指标计算
+numpy>=1.24.0             # 数值计算
+python-dotenv>=1.0.0      # .env 环境变量管理
+schedule>=1.2.0           # 每4小时调度
+matplotlib>=3.5.0         # 权益曲线图 / GUI 内嵌图表
+# 注：LLM 决策走 DeepSeek（OpenAI 兼容端点），main 内用 requests 裸调，
+#     无需安装 openai / anthropic SDK。

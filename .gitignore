@@ -1,0 +1,34 @@
+# Secrets and local configuration
+**/.env
+**/.env.*
+!**/.env.example
+
+# Python environments and caches
+**/.venv/
+**/venv/
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+
+# Runtime state and logs
+**/*.log
+**/state.json
+**/trading.log.*
+
+# Generated backtest artifacts
+llm_trading_agent/runs/
+llm_trading_agent/backtest_equity.csv
+llm_trading_agent/backtest_equity_chart.png
+llm_trading_agent/backtest_report.md
+llm_trading_agent/backtest_repro.json
+
+# External reference checkout (kept locally, not part of this codebase)
+_ref_daily_stock_analysis/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
