@@ -7,6 +7,7 @@ from pathlib import Path
 import pandas as pd
 
 from selector.pipeline import run_selection, validate_input
+from selector.providers.us_sec_yahoo import _annual_records
 
 
 def sample_frame(rows: int = 20) -> pd.DataFrame:
@@ -41,6 +42,14 @@ def sample_frame(rows: int = 20) -> pd.DataFrame:
 
 
 class SelectorTests(unittest.TestCase):
+    def test_sec_record_filed_after_snapshot_is_excluded(self) -> None:
+        rows = [
+            {"start": "2024-01-01", "end": "2024-12-31", "filed": "2025-02-01", "form": "10-K", "val": 10, "priority": 0},
+            {"start": "2023-01-01", "end": "2023-12-31", "filed": "2024-02-01", "form": "10-K", "val": 8, "priority": 0},
+        ]
+        selected = _annual_records(rows, "2025-01-15")
+        self.assertEqual(set(selected), {"2023-12-31"})
+
     def test_future_data_is_blocked(self) -> None:
         frame = sample_frame()
         frame.loc[0, "fundamental_as_of"] = "2025-07-16"

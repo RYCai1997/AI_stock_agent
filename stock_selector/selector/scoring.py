@@ -65,7 +65,11 @@ def score_frame(frame: pd.DataFrame, config: SelectorConfig) -> pd.DataFrame:
     mmask = scored["value_pass"] & momentum_complete
     scored.loc[mmask, "mom_6_1_rank"] = percentile(scored.loc[mmask, "mom_6_1"])
     scored.loc[mmask, "mom_12_1_rank"] = percentile(scored.loc[mmask, "mom_12_1"])
-    has_relative_strength = "relative_strength" in scored and scored.loc[mmask, "relative_strength"].notna().all()
+    has_relative_strength = (
+        config.use_relative_strength
+        and "relative_strength" in scored
+        and scored.loc[mmask, "relative_strength"].notna().all()
+    )
     if has_relative_strength:
         scored.loc[mmask, "relative_strength_rank"] = percentile(scored.loc[mmask, "relative_strength"])
         scored["momentum_score"] = (

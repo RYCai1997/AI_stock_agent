@@ -10,6 +10,7 @@ class SelectorConfig:
     momentum_top_fraction: float = 0.20
     minimum_industry_group: int = 5
     exclude_financials: bool = True
+    use_relative_strength: bool = False
 
     def __post_init__(self) -> None:
         if not 0 < self.quality_quantile < 1:
@@ -23,4 +24,3 @@ class SelectorConfig:
 
     def to_dict(self) -> dict:
         return asdict(self)
-
