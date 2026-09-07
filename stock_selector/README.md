@@ -22,6 +22,19 @@ python run_us_cached_snapshot.py --as-of 2025-07-15 `
   --output outputs\us_2025-07-15
 ```
 
+使用 Baostock 重建历史沪深300节点：
+
+```powershell
+python run_a_snapshot.py --as-of 2025-07-15 `
+  --output outputs\a_csi300_2025-07-15
+```
+
+A股使用独立的 `a_share_v1` 因子口径：Quality 为 ROE、CFO/营收和 EPS
+增长稳定性；Value 为盈利收益率、净现金流收益率和账面市值比。这里的净现金流
+收益率来自 Baostock `pcfNcfTTM` 的倒数，不等同于经营现金流收益率或 FCF Yield。
+所有财务记录必须满足 `pubDate <= --as-of`，历史沪深300成分、行情与财务日期都会
+写入元数据供审计。
+
 ## 输入
 
 输入字段模板见 `examples/input_template.csv`。每一行必须是筛选日当时股票池中的一只股票，并明确记录：
@@ -46,6 +59,6 @@ python run_us_cached_snapshot.py --as-of 2025-07-15 `
 - 默认沿用已回测的6-1M与12-1M各50%；行业相对强弱会输出，但在完成独立对照前不加入正式分数。
 - 金融公司默认保留在输出中但不参加Q/V/M筛选，因为普通公司的ROIC与FCF口径不适合银行、保险和券商。
 - 技术价格信息只负责趋势与风险提示，不进入Q/V/M总分。
-- 尚未接入A股、港股、美股的自动数据提供器；V1先固定评分语义和审计边界。
+- 已接入A股 Baostock 历史沪深300提供器和美股本地历史缓存提供器；港股尚未接入。
 - 美股本地历史缓存提供器已经接入；自动补齐缺失文件仍未实现。
 - `audit_us_coverage.py`可将每个历史成分代码归类并核对总数；`update_us_cache.py`默认只做dry-run，只有显式添加 `--execute`才下载缺失文件。

@@ -5,6 +5,7 @@ from dataclasses import asdict, dataclass
 
 @dataclass(frozen=True)
 class SelectorConfig:
+    factor_profile: str = "us_standard"
     quality_quantile: float = 0.50
     value_min_score: float = 20.0
     momentum_top_fraction: float = 0.20
@@ -13,6 +14,8 @@ class SelectorConfig:
     use_relative_strength: bool = False
 
     def __post_init__(self) -> None:
+        if self.factor_profile not in {"us_standard", "a_share_v1"}:
+            raise ValueError("factor_profile must be us_standard or a_share_v1")
         if not 0 < self.quality_quantile < 1:
             raise ValueError("quality_quantile must be in (0, 1)")
         if not 0 <= self.value_min_score < 100:

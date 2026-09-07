@@ -9,6 +9,32 @@ from .config import SelectorConfig
 QUALITY_COLUMNS = ["roic", "fcf_margin", "eps_growth_std"]
 VALUE_COLUMNS = ["earnings_yield", "fcf_yield", "book_to_price"]
 MOMENTUM_COLUMNS = ["mom_6_1", "mom_12_1"]
+FACTOR_PROFILES = {
+    "us_standard": {
+        "quality": ["roic", "fcf_margin", "eps_growth_std"],
+        "value": ["earnings_yield", "fcf_yield", "book_to_price"],
+        "labels": {
+            "efficiency": "ROIC",
+            "cashflow_margin": "FCF margin",
+            "stability": "EPS growth stability",
+            "cashflow_yield": "FCF yield",
+        },
+    },
+    "a_share_v1": {
+        "quality": ["roe", "cfo_to_revenue", "eps_growth_std"],
+        "value": ["earnings_yield", "net_cashflow_yield", "book_to_price"],
+        "labels": {
+            "efficiency": "ROE",
+            "cashflow_margin": "CFO / revenue",
+            "stability": "EPS growth stability",
+            "cashflow_yield": "net cashflow yield",
+        },
+    },
+}
+
+
+def factor_profile(name: str) -> dict:
+    return FACTOR_PROFILES[name]
 
 
 def percentile(series: pd.Series, higher_is_better: bool = True) -> pd.Series:
@@ -18,28 +44,37 @@ def percentile(series: pd.Series, higher_is_better: bool = True) -> pd.Series:
 def score_frame(frame: pd.DataFrame, config: SelectorConfig) -> pd.DataFrame:
     """Score one market and one as-of date using only supplied point-in-time rows."""
     scored = frame.copy()
+    profile = factor_profile(config.factor_profile)
+    quality_columns = profile["quality"]
+    value_columns = profile["value"]
+    efficiency, cashflow_margin, stability = quality_columns
+    earnings_yield, cashflow_yield, book_to_price = value_columns
     financial = scored["industry_l1"].astype(str).str.lower().str.contains(
         r"financial|finance|金融|银行|保险|券商", regex=True, na=False
     )
     scored["model_supported"] = ~financial if config.exclude_financials else True
+    if "security_eligible" in scored:
+        scored["security_eligible"] = scored["security_eligible"].fillna(False).astype(bool)
+    else:
+        scored["security_eligible"] = True
 
-    quality_complete = scored[QUALITY_COLUMNS].notna().all(axis=1)
-    scored["quality_complete"] = scored["model_supported"] & quality_complete
+    quality_complete = scored[quality_columns].notna().all(axis=1)
+    scored["quality_complete"] = scored["model_supported"] & scored["security_eligible"] & quality_complete
     qmask = scored["quality_complete"]
-    scored.loc[qmask, "roic_rank"] = percentile(scored.loc[qmask, "roic"])
-    scored.loc[qmask, "fcf_margin_rank"] = percentile(scored.loc[qmask, "fcf_margin"])
+    scored.loc[qmask, "efficiency_rank"] = percentile(scored.loc[qmask, efficiency])
+    scored.loc[qmask, "cashflow_margin_rank"] = percentile(scored.loc[qmask, cashflow_margin])
     scored.loc[qmask, "stability_rank"] = percentile(
-        scored.loc[qmask, "eps_growth_std"], higher_is_better=False
+        scored.loc[qmask, stability], higher_is_better=False
     )
     scored["quality_score"] = (
-        0.40 * scored["roic_rank"]
-        + 0.30 * scored["fcf_margin_rank"]
+        0.40 * scored["efficiency_rank"]
+        + 0.30 * scored["cashflow_margin_rank"]
         + 0.30 * scored["stability_rank"]
     )
     cutoff = scored.loc[qmask, "quality_score"].quantile(config.quality_quantile) if qmask.any() else np.nan
     scored["quality_pass"] = qmask & scored["quality_score"].ge(cutoff)
 
-    value_complete = scored[VALUE_COLUMNS + ["industry_l1", "industry_l2"]].notna().all(axis=1)
+    value_complete = scored[value_columns + ["industry_l1", "industry_l2"]].notna().all(axis=1)
     scored["value_complete"] = value_complete
     vmask = scored["quality_pass"] & value_complete
     scored["value_group"] = pd.NA
@@ -49,14 +84,14 @@ def score_frame(frame: pd.DataFrame, config: SelectorConfig) -> pd.DataFrame:
         small = pd.Series(False, index=scored.index)
         small.loc[vmask] = l2_counts.lt(config.minimum_industry_group).to_numpy()
         scored.loc[small, "value_group"] = "L1:" + scored.loc[small, "industry_l1"].astype(str)
-        for column in VALUE_COLUMNS:
+        for column in value_columns:
             scored.loc[vmask, f"{column}_rank"] = (
                 scored.loc[vmask].groupby("value_group")[column].rank(pct=True, method="average") * 100.0
             )
     scored["value_score"] = (
-        0.40 * scored["earnings_yield_rank"]
-        + 0.40 * scored["fcf_yield_rank"]
-        + 0.20 * scored["book_to_price_rank"]
+        0.40 * scored[f"{earnings_yield}_rank"]
+        + 0.40 * scored[f"{cashflow_yield}_rank"]
+        + 0.20 * scored[f"{book_to_price}_rank"]
     )
     scored["value_pass"] = vmask & scored["value_score"].gt(config.value_min_score)
 
@@ -86,5 +121,13 @@ def score_frame(frame: pd.DataFrame, config: SelectorConfig) -> pd.DataFrame:
     scored["fundamental_candidate"] = mmask & scored["momentum_score"].ge(momentum_cutoff)
     scored["candidate_rank"] = scored.loc[scored["fundamental_candidate"], "momentum_score"].rank(
         ascending=False, method="min"
+    )
+    scored["factor_profile"] = config.factor_profile
+    scored["quality_formula"] = (
+        f"40% {profile['labels']['efficiency']} + 30% {profile['labels']['cashflow_margin']} "
+        f"+ 30% {profile['labels']['stability']}"
+    )
+    scored["value_formula"] = (
+        f"40% earnings yield + 40% {profile['labels']['cashflow_yield']} + 20% book-to-price"
     )
     return scored

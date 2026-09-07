@@ -25,6 +25,7 @@ llm_trading_agent/backtest_report.md
 llm_trading_agent/backtest_repro.json
 stock_selector/outputs/
 stock_selector/data/cache/
+stock_selector/**/provider_cache/
 
 # External reference checkout (kept locally, not part of this codebase)
 _ref_daily_stock_analysis/

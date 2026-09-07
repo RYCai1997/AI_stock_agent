@@ -6,7 +6,9 @@ from pathlib import Path
 
 import pandas as pd
 
+from selector.config import SelectorConfig
 from selector.pipeline import run_selection, validate_input
+from selector.providers.a_baostock import _upgrade_cached_row
 from selector.providers.us_sec_yahoo import _annual_records
 
 
@@ -42,6 +44,35 @@ def sample_frame(rows: int = 20) -> pd.DataFrame:
 
 
 class SelectorTests(unittest.TestCase):
+    def test_a_share_v1_cache_label_is_migrated_without_value_change(self) -> None:
+        payload = {
+            "cache_version": 1,
+            "row": {"ticker": "sh.600000", "operating_cashflow_yield": -0.125},
+        }
+        row = _upgrade_cached_row(payload)
+        self.assertNotIn("operating_cashflow_yield", row)
+        self.assertEqual(row["net_cashflow_yield"], -0.125)
+
+    def test_a_share_factor_profile_uses_market_specific_fields(self) -> None:
+        frame = sample_frame().rename(columns={
+            "roic": "roe",
+            "fcf_margin": "cfo_to_revenue",
+            "fcf_yield": "net_cashflow_yield",
+        })
+        frame["market"] = "A"
+        with tempfile.TemporaryDirectory() as folder:
+            result, metadata = run_selection(
+                frame,
+                "A",
+                "2025-07-15",
+                Path(folder),
+                market_trend="up",
+                config=SelectorConfig(factor_profile="a_share_v1"),
+            )
+            self.assertEqual(metadata["config"]["factor_profile"], "a_share_v1")
+            self.assertTrue(result["quality_formula"].str.contains("ROE").all())
+            self.assertGreater(metadata["counts"]["fundamental_candidates"], 0)
+
     def test_sec_record_filed_after_snapshot_is_excluded(self) -> None:
         rows = [
             {"start": "2024-01-01", "end": "2024-12-31", "filed": "2025-02-01", "form": "10-K", "val": 10, "priority": 0},
