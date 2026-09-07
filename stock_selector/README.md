@@ -48,6 +48,19 @@ python backtest_a_nodes.py `
 标签。Baostock登录状态不支持本项目并行下载多个节点，应保持串行运行；断点缓存会
 避免重复查询成功记录，瞬时网络或登录错误则会自动重试。
 
+在已经固定的Q/V/M候选上测试止损与过热入场规则：
+
+```powershell
+python test_a_risk_rules.py `
+  --snapshot-root outputs\a_multinode_demo\snapshots `
+  --nodes-file outputs\a_multinode_demo\nodes.csv `
+  --output outputs\a_risk_rules_demo
+```
+
+该脚本不会重新选股。默认过热条件为沪深300截至信号日的20个交易日涨幅超过10%；
+测试立即买入、固定-10%盘中止损、过热时延后5个交易日、50/50分批及延后后止损。
+跳空跌破止损价按更差的开盘价成交，但尚未模拟跌停无法成交。
+
 ## 输入
 
 输入字段模板见 `examples/input_template.csv`。每一行必须是筛选日当时股票池中的一只股票，并明确记录：

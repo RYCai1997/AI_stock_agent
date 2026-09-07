@@ -7,6 +7,7 @@ from pathlib import Path
 import pandas as pd
 
 from backtest_a_nodes import calculate_forward_outcomes, select_variants
+from test_a_risk_rules import market_is_overheated, simulate_rule
 from selector.config import SelectorConfig
 from selector.pipeline import run_selection, validate_input
 from selector.providers.a_baostock import _upgrade_cached_row
@@ -45,6 +46,39 @@ def sample_frame(rows: int = 20) -> pd.DataFrame:
 
 
 class SelectorTests(unittest.TestCase):
+    def test_intraday_stop_fills_at_stop_and_gap_uses_worse_open(self) -> None:
+        prices = pd.DataFrame([
+            {"date": "2025-07-15", "open": 100, "high": 101, "low": 99, "close": 100, "tradestatus": "1"},
+        ])
+        future_dates = pd.date_range("2025-07-16", periods=130, freq="B")
+        future = pd.DataFrame({
+            "date": future_dates, "open": 100.0, "high": 101.0,
+            "low": 99.0, "close": 100.0, "tradestatus": "1",
+        })
+        future.loc[5, ["open", "high", "low", "close"]] = [95.0, 96.0, 89.0, 92.0]
+        prices = pd.concat([prices.iloc[:1], future], ignore_index=True)
+        stopped = simulate_rule(prices, "2025-07-15", "stop10_immediate", False)
+        self.assertTrue(stopped["stop_triggered"])
+        self.assertAlmostEqual(stopped["return_1m"], -0.10)
+        self.assertAlmostEqual(stopped["worst_return_from_entry_6m"], -0.10)
+
+        future.loc[5, ["open", "high", "low", "close"]] = [85.0, 88.0, 82.0, 86.0]
+        prices = pd.concat([prices.iloc[:1], future], ignore_index=True)
+        gap = simulate_rule(prices, "2025-07-15", "stop10_immediate", False)
+        self.assertAlmostEqual(gap["return_1m"], -0.15)
+        self.assertAlmostEqual(gap["worst_return_from_entry_6m"], -0.15)
+
+    def test_overheat_uses_only_signal_date_and_prior_closes(self) -> None:
+        dates = pd.date_range("2025-06-16", periods=22, freq="B")
+        prices = pd.DataFrame({
+            "date": dates, "open": range(100, 122), "high": range(101, 123),
+            "low": range(99, 121), "close": range(100, 122), "tradestatus": "1",
+        })
+        signal = str(dates[20].date())
+        overheated, observed = market_is_overheated(prices, signal, threshold=0.10)
+        self.assertTrue(overheated)
+        self.assertAlmostEqual(observed, 0.20)
+
     def test_forward_outcome_enters_after_signal_and_uses_calendar_horizons(self) -> None:
         prices = pd.DataFrame([
             {"date": "2025-07-15", "open": 99, "high": 101, "low": 98, "close": 100, "tradestatus": "1"},
