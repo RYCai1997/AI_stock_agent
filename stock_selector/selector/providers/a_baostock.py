@@ -20,7 +20,7 @@ INDUSTRY_SECTIONS = {
     "M": "M 科研技术服务业", "N": "N 环保公共设施业", "O": "O 居民服务业",
     "P": "P 教育", "Q": "Q 卫生社会工作", "R": "R 文化体育娱乐业", "S": "S 综合",
 }
-CACHE_VERSION = 2
+CACHE_VERSION = 3
 K_FIELDS = (
     "date,code,open,high,low,close,volume,amount,turn,tradestatus,pctChg,"
     "peTTM,pbMRQ,psTTM,pcfNcfTTM,isST"
@@ -90,7 +90,9 @@ def _latest_quality(bs: Any, code: str, as_of: str) -> tuple[dict[str, Any] | No
             break
 
     annual = []
-    for year in range(pd.Timestamp(as_of).year, pd.Timestamp(as_of).year - 6, -1):
+    # Early-year snapshots may not yet have the preceding fiscal year's annual
+    # filing. Search a wider calendar window without accepting later filings.
+    for year in range(pd.Timestamp(as_of).year, pd.Timestamp(as_of).year - 10, -1):
         for row in _rows(bs.query_profit_data(code=code, year=year, quarter=4)):
             if row.get("pubDate") and row["pubDate"] <= as_of and _number(row.get("epsTTM")) is not None:
                 annual.append(row)
@@ -194,14 +196,20 @@ def build_a_metrics(
             cache_path = cache_dir / f"{as_of}_{code}.json" if cache_dir else None
             if cache_path and cache_path.exists():
                 cached = json.loads(cache_path.read_text(encoding="utf-8"))
-                if cached.get("cache_version") in {1, CACHE_VERSION} and cached.get("as_of") == as_of:
-                    cache_hits += 1
+                if cached.get("cache_version") in {1, 2, CACHE_VERSION} and cached.get("as_of") == as_of:
                     cached_row = _upgrade_cached_row(cached)
-                    if cached_row:
+                    legacy_missing_stability = (
+                        cached.get("cache_version") < CACHE_VERSION
+                        and cached_row is not None
+                        and cached_row.get("eps_growth_std") is None
+                    )
+                    if cached_row and not legacy_missing_stability:
+                        cache_hits += 1
                         output.append(cached_row)
-                    elif cached.get("error"):
-                        errors[code] = cached["error"]
-                    continue
+                        continue
+                    # Provider/network errors are intentionally retried. A
+                    # transient login failure must not become permanent data
+                    # missingness merely because it was cached during a run.
             try:
                 industry = industries.get(code, {})
                 industry_name = industry.get("industry") or "Unknown"

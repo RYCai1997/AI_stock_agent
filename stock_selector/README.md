@@ -35,6 +35,19 @@ A股使用独立的 `a_share_v1` 因子口径：Quality 为 ROE、CFO/营收和 
 所有财务记录必须满足 `pubDate <= --as-of`，历史沪深300成分、行情与财务日期都会
 写入元数据供审计。
 
+多节点回顾测试：
+
+```powershell
+python backtest_a_nodes.py `
+  --nodes 2022-04-29,2023-02-01,2024-02-05,2024-10-08,2025-07-15 `
+  --output outputs\a_multinode_demo `
+  --snapshot-cache outputs\a_provider_cache
+```
+
+程序以信号后首个交易日开盘价模拟买入，并把未来1、3、6个月收益单独保存为结果
+标签。Baostock登录状态不支持本项目并行下载多个节点，应保持串行运行；断点缓存会
+避免重复查询成功记录，瞬时网络或登录错误则会自动重试。
+
 ## 输入
 
 输入字段模板见 `examples/input_template.csv`。每一行必须是筛选日当时股票池中的一只股票，并明确记录：
@@ -52,6 +65,7 @@ A股使用独立的 `a_share_v1` 因子口径：Quality 为 ROE、CFO/营收和 
 - `selected.csv`：通过Q/V/M两阶段筛选的候选池，不受市场趋势参数影响；
 - `actionable.csv`：在Q/V/M入选基础上，市场与个股趋势均确认的候选；
 - `metadata.json`：参数、数据日期范围、数量漏斗及模型边界。
+- 多节点测试另输出 `nodes.csv`、`forward_outcomes.csv` 和 `portfolio_summary.csv`。
 
 ## 当前边界
 

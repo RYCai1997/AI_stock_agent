@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from backtest_a_nodes import calculate_forward_outcomes, select_variants
 from selector.config import SelectorConfig
 from selector.pipeline import run_selection, validate_input
 from selector.providers.a_baostock import _upgrade_cached_row
@@ -44,6 +45,47 @@ def sample_frame(rows: int = 20) -> pd.DataFrame:
 
 
 class SelectorTests(unittest.TestCase):
+    def test_forward_outcome_enters_after_signal_and_uses_calendar_horizons(self) -> None:
+        prices = pd.DataFrame([
+            {"date": "2025-07-15", "open": 99, "high": 101, "low": 98, "close": 100, "tradestatus": "1"},
+            {"date": "2025-07-16", "open": 100, "high": 103, "low": 99, "close": 102, "tradestatus": "1"},
+            {"date": "2025-08-15", "open": 108, "high": 111, "low": 107, "close": 110, "tradestatus": "1"},
+            {"date": "2025-10-15", "open": 118, "high": 121, "low": 117, "close": 120, "tradestatus": "1"},
+            {"date": "2026-01-15", "open": 128, "high": 131, "low": 127, "close": 130, "tradestatus": "1"},
+        ])
+        outcome = calculate_forward_outcomes(prices, "2025-07-15")
+        self.assertEqual(outcome["entry_date"], "2025-07-16")
+        self.assertAlmostEqual(outcome["return_1m"], 0.10)
+        self.assertAlmostEqual(outcome["return_3m"], 0.20)
+        self.assertAlmostEqual(outcome["return_6m"], 0.30)
+
+    def test_comparison_variants_do_not_use_future_outcomes(self) -> None:
+        frame = sample_frame()
+        with tempfile.TemporaryDirectory() as folder:
+            scored, _ = run_selection(
+                frame, "US", "2025-07-15", Path(folder), market_trend="up"
+            )
+        scored["net_cashflow_yield"] = scored["fcf_yield"]
+        scored["future_return"] = range(len(scored))
+        variants = select_variants(scored, "up")
+        scored["future_return"] = list(reversed(range(len(scored))))
+        changed_labels = select_variants(scored, "up")
+        self.assertEqual(len(variants["qvm_current"]), len(variants["momentum_only_matched_n"]))
+        for strategy in variants:
+            self.assertEqual(set(variants[strategy]["ticker"]), set(changed_labels[strategy]["ticker"]))
+
+    def test_empty_intermediate_pool_returns_zero_candidates(self) -> None:
+        frame = sample_frame()
+        frame["industry_l1"] = "J 金融业"
+        with tempfile.TemporaryDirectory() as folder:
+            result, metadata = run_selection(
+                frame, "US", "2025-07-15", Path(folder), market_trend="up"
+            )
+        self.assertEqual(metadata["counts"]["quality_pass"], 0)
+        self.assertEqual(metadata["counts"]["value_pass"], 0)
+        self.assertEqual(metadata["counts"]["fundamental_candidates"], 0)
+        self.assertFalse(result["actionable_candidate"].any())
+
     def test_a_share_v1_cache_label_is_migrated_without_value_change(self) -> None:
         payload = {
             "cache_version": 1,

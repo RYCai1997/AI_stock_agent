@@ -78,6 +78,8 @@ def score_frame(frame: pd.DataFrame, config: SelectorConfig) -> pd.DataFrame:
     scored["value_complete"] = value_complete
     vmask = scored["quality_pass"] & value_complete
     scored["value_group"] = pd.NA
+    for column in value_columns:
+        scored[f"{column}_rank"] = np.nan
     if vmask.any():
         l2_counts = scored.loc[vmask].groupby("industry_l2")["ticker"].transform("size")
         scored.loc[vmask, "value_group"] = "L2:" + scored.loc[vmask, "industry_l2"].astype(str)
@@ -98,6 +100,8 @@ def score_frame(frame: pd.DataFrame, config: SelectorConfig) -> pd.DataFrame:
     momentum_complete = scored[MOMENTUM_COLUMNS].notna().all(axis=1)
     scored["momentum_complete"] = momentum_complete
     mmask = scored["value_pass"] & momentum_complete
+    scored["mom_6_1_rank"] = np.nan
+    scored["mom_12_1_rank"] = np.nan
     scored.loc[mmask, "mom_6_1_rank"] = percentile(scored.loc[mmask, "mom_6_1"])
     scored.loc[mmask, "mom_12_1_rank"] = percentile(scored.loc[mmask, "mom_12_1"])
     has_relative_strength = (
