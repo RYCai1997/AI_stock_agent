@@ -120,6 +120,8 @@ def score_frame(frame: pd.DataFrame, config: SelectorConfig) -> pd.DataFrame:
     else:
         scored["momentum_score"] = 0.50 * scored["mom_6_1_rank"] + 0.50 * scored["mom_12_1_rank"]
         scored["momentum_formula"] = "50% 6-1M + 50% 12-1M"
+    scored["momentum_percentile"] = np.nan
+    scored.loc[mmask, "momentum_percentile"] = percentile(scored.loc[mmask, "momentum_score"])
     selected_quantile = 1.0 - config.momentum_top_fraction
     momentum_cutoff = scored.loc[mmask, "momentum_score"].quantile(selected_quantile) if mmask.any() else np.nan
     scored["fundamental_candidate"] = mmask & scored["momentum_score"].ge(momentum_cutoff)

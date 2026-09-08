@@ -8,9 +8,11 @@ import pandas as pd
 
 from backtest_a_nodes import calculate_forward_outcomes, select_variants
 from test_a_risk_rules import market_is_overheated, simulate_rule
+from test_a_requalification_exit import simulate_policy_exit
 from selector.config import SelectorConfig
+from selector.exit_policy import evaluate_monthly_exit
 from selector.pipeline import run_selection, validate_input
-from selector.providers.a_baostock import _upgrade_cached_row
+from selector.providers.a_baostock import _price_metrics_from_frame, _upgrade_cached_row
 from selector.providers.us_sec_yahoo import _annual_records
 
 
@@ -46,6 +48,74 @@ def sample_frame(rows: int = 20) -> pd.DataFrame:
 
 
 class SelectorTests(unittest.TestCase):
+    def test_monthly_policy_exit_uses_next_session_open(self) -> None:
+        dates = pd.date_range("2025-07-15", periods=140, freq="B")
+        prices = pd.DataFrame({
+            "date": dates, "open": 100.0, "high": 102.0,
+            "low": 99.0, "close": 101.0, "tradestatus": "1",
+        })
+        review_date = str(dates[22].date())
+        next_date = str(dates[23].date())
+        prices.loc[23, "open"] = 105.0
+        outcome = simulate_policy_exit(prices, "2025-07-15", False, [{
+            "review_date": review_date, "action": "exit", "reason": "stock below EMA200",
+        }])
+        self.assertEqual(outcome["exit_date"], next_date)
+        self.assertEqual(outcome["exit_reason"], "stock below EMA200")
+        self.assertAlmostEqual(outcome["return_3m"], 0.05)
+
+    def test_price_metrics_ignore_future_rows(self) -> None:
+        dates = pd.date_range("2024-01-01", periods=400, freq="B")
+        frame = pd.DataFrame({
+            "date": dates, "close": range(100, 500), "volume": 1, "amount": 1,
+            "turn": 1, "peTTM": 20, "pbMRQ": 2, "pcfNcfTTM": 10,
+            "tradestatus": "1", "isST": "0",
+        })
+        as_of = str(dates[300].date())
+        before = _price_metrics_from_frame(frame.iloc[:301], as_of)
+        changed_future = frame.copy()
+        changed_future.loc[301:, "close"] = 99999
+        after = _price_metrics_from_frame(changed_future, as_of)
+        self.assertEqual(before["price"], after["price"])
+        self.assertEqual(before["mom_12_1"], after["mom_12_1"])
+
+    def test_exit_policy_rank_loss_alone_is_warning_not_exit(self) -> None:
+        row = pd.Series({
+            "security_eligible": True, "model_supported": True, "quality_pass": True,
+            "value_pass": True, "above_ema200": True, "momentum_percentile": 75,
+            "fundamental_candidate": False,
+        })
+        first = evaluate_monthly_exit(row, "up", True, 0)
+        second = evaluate_monthly_exit(
+            row, "up", True, first.nonselected_streak, first.below_ema_streak
+        )
+        self.assertEqual(first.action, "hold")
+        self.assertEqual(second.action, "hold")
+
+    def test_exit_policy_requires_confirmation_for_stock_ema_break(self) -> None:
+        row = pd.Series({
+            "security_eligible": True, "model_supported": True, "quality_pass": True,
+            "value_pass": True, "above_ema200": False, "momentum_percentile": 99,
+            "fundamental_candidate": True,
+        })
+        first = evaluate_monthly_exit(row, "up", True, 0, 0)
+        second = evaluate_monthly_exit(
+            row, "up", True, first.nonselected_streak, first.below_ema_streak
+        )
+        self.assertEqual(first.action, "hold")
+        self.assertEqual(second.action, "exit")
+        self.assertEqual(second.reason, "selection and EMA200 break confirmed")
+
+    def test_exit_policy_market_and_stock_break_exits_immediately(self) -> None:
+        row = pd.Series({
+            "security_eligible": True, "model_supported": True, "quality_pass": True,
+            "value_pass": True, "above_ema200": False, "momentum_percentile": 99,
+            "fundamental_candidate": True,
+        })
+        decision = evaluate_monthly_exit(row, "down", True, 0, 0)
+        self.assertEqual(decision.action, "exit")
+        self.assertEqual(decision.reason, "market and stock below EMA200")
+
     def test_intraday_stop_fills_at_stop_and_gap_uses_worse_open(self) -> None:
         prices = pd.DataFrame([
             {"date": "2025-07-15", "open": 100, "high": 101, "low": 99, "close": 100, "tradestatus": "1"},

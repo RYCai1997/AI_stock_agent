@@ -61,6 +61,19 @@ python test_a_risk_rules.py `
 测试立即买入、固定-10%盘中止损、过热时延后5个交易日、50/50分批及延后后止损。
 跳空跌破止损价按更差的开盘价成交，但尚未模拟跌停无法成交。
 
+测试持仓月度复核与确认式退出：
+
+```powershell
+python test_a_requalification_exit.py `
+  --snapshot-root outputs\a_multinode_demo_v2\snapshots `
+  --nodes-file outputs\a_multinode_demo_v2\nodes.csv `
+  --output outputs\a_requalification_exit_demo
+```
+
+月度跌出Q/V/M名单只产生预警；只有个股EMA200也确认破坏时才退出。当前三个有效节点
+中，该规则小幅降低回撤但未提高平均收益，因此仍属于实验规则。结果和方法边界见
+`A_REQUALIFICATION_EXIT_DEMO.md`。
+
 ## 输入
 
 输入字段模板见 `examples/input_template.csv`。每一行必须是筛选日当时股票池中的一只股票，并明确记录：
@@ -79,6 +92,7 @@ python test_a_risk_rules.py `
 - `actionable.csv`：在Q/V/M入选基础上，市场与个股趋势均确认的候选；
 - `metadata.json`：参数、数据日期范围、数量漏斗及模型边界。
 - 多节点测试另输出 `nodes.csv`、`forward_outcomes.csv` 和 `portfolio_summary.csv`。
+- 月度复核实验另输出逐股票退出结果、逐月决策、复核漏斗、汇总和元数据。
 
 ## 当前边界
 

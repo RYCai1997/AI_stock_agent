@@ -105,16 +105,16 @@ def _at_or_before(series: pd.Series, when: pd.Timestamp) -> float | None:
     return float(eligible.iloc[-1]) if not eligible.empty else None
 
 
-def _price_metrics(bs: Any, code: str, as_of: str) -> dict[str, Any]:
+def _price_metrics_from_frame(frame: pd.DataFrame, as_of: str) -> dict[str, Any]:
+    """Compute point-in-time price fields while ignoring rows after ``as_of``."""
     node = pd.Timestamp(as_of)
-    start = str((node - pd.Timedelta(days=550)).date())
-    rows = _rows(bs.query_history_k_data_plus(
-        code, K_FIELDS, start_date=start, end_date=as_of, frequency="d", adjustflag="2"
-    ))
-    frame = pd.DataFrame(rows)
+    frame = frame.copy()
     if frame.empty:
         raise ValueError("no price history")
     frame["date"] = pd.to_datetime(frame["date"])
+    frame = frame[frame["date"].le(node)]
+    if frame.empty:
+        raise ValueError("no price history at or before snapshot")
     numeric = ["close", "volume", "amount", "turn", "peTTM", "pbMRQ", "pcfNcfTTM"]
     frame[numeric] = frame[numeric].apply(pd.to_numeric, errors="coerce")
     frame = frame.drop_duplicates("date", keep="last").sort_values("date").set_index("date")
@@ -146,6 +146,15 @@ def _price_metrics(bs: Any, code: str, as_of: str) -> dict[str, Any]:
         "tradestatus": str(latest.get("tradestatus", "")),
         "is_st": str(latest.get("isST", "")),
     }
+
+
+def _price_metrics(bs: Any, code: str, as_of: str) -> dict[str, Any]:
+    node = pd.Timestamp(as_of)
+    start = str((node - pd.Timedelta(days=550)).date())
+    rows = _rows(bs.query_history_k_data_plus(
+        code, K_FIELDS, start_date=start, end_date=as_of, frequency="d", adjustflag="2"
+    ))
+    return _price_metrics_from_frame(pd.DataFrame(rows), as_of)
 
 
 def _eps_stability(annual: list[dict[str, Any]]) -> float | None:
