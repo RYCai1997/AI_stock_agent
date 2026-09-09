@@ -9,6 +9,7 @@ import pandas as pd
 from backtest_a_nodes import calculate_forward_outcomes, select_variants
 from test_a_risk_rules import market_is_overheated, simulate_rule
 from test_a_requalification_exit import simulate_policy_exit
+from compare_portfolio_breadth import compare_node
 from selector.config import SelectorConfig
 from selector.exit_policy import evaluate_monthly_exit
 from selector.holding_review import review_holdings
@@ -51,6 +52,24 @@ def sample_frame(rows: int = 20) -> pd.DataFrame:
 
 
 class SelectorTests(unittest.TestCase):
+    def test_portfolio_breadth_keeps_total_exposure_constant(self) -> None:
+        outcomes = pd.DataFrame({
+            "ticker": [f"S{i}" for i in range(12)],
+            "candidate_rank": range(1, 13),
+            "momentum_score": range(12, 0, -1),
+            "return_1m": [0.01] * 12,
+            "return_3m": [0.02] * 12,
+            "return_6m": [0.03] * 12,
+        })
+        rows = pd.DataFrame(compare_node(outcomes, "2025-07-15", 0.30))
+        six_month = rows[rows["horizon_months"].eq(6)].set_index("variant")
+        self.assertEqual(six_month.loc["top3", "positions"], 3)
+        self.assertEqual(six_month.loc["top5", "positions"], 5)
+        self.assertEqual(six_month.loc["top10", "positions"], 10)
+        self.assertEqual(six_month.loc["all_candidates", "positions"], 12)
+        self.assertTrue(six_month["total_exposure"].eq(0.30).all())
+        self.assertTrue(six_month["account_return_contribution"].round(8).eq(0.009).all())
+
     def test_official_strategy_parameters_are_frozen(self) -> None:
         strategy = OFFICIAL_STRATEGY
         config = strategy.selector_config()

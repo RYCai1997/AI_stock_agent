@@ -39,7 +39,7 @@ python stock_selector\run_official_strategy.py --as-of 2026-09-09 `
 
 - A股现货long/flat，不做杠杆、合约或卖空；
 - 不连接券商，不自动下单；
-- LLM不参与评分、排名、仓位或订单；
+- 系统为确定性规则程序，不依赖LLM；
 - 所有建议都要求人工确认；
 - 任何晚于筛选日期的数据都会被拒绝。
 

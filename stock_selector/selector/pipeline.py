@@ -135,7 +135,7 @@ def run_selection(
         },
         "boundaries": [
             "research only; no broker connection or order execution",
-            "LLM does not change scores, ranking, position size or orders",
+            "deterministic rules only; no LLM dependency in the execution path",
             "financial-sector Q/V model is not implemented and is excluded by default",
             "technical price fields are timing and risk context, not Q/V/M score inputs",
         ],
