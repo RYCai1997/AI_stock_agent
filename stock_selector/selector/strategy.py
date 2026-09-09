@@ -14,9 +14,9 @@ class OfficialStrategy:
     market: str = "A"
     universe: str = "CSI 300"
     instrument_mode: str = "spot_long_only"
-    fixed_position_fraction: float = 0.10
+    fixed_position_fraction: float = 0.06
     max_new_exposure_per_window: float = 0.30
-    max_new_positions_per_window: int = 3
+    max_new_positions_per_window: int = 5
     overheat_return_sessions: int = 20
     overheat_return_threshold: float = 0.10
     overheat_delay_sessions: int = 5

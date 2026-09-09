@@ -45,7 +45,7 @@ def evaluate_monthly_exit(
     above_ema = bool(row.get("above_ema200", False))
     below_ema_streak = 0 if above_ema else previous_below_ema_streak + 1
 
-    if not above_ema and market_trend != "up":
+    if not above_ema and market_trend == "down":
         return ExitDecision("exit", "market and stock below EMA200", 0, 0)
     confirmations = OFFICIAL_STRATEGY.confirmation_reviews
     if not above_ema and (

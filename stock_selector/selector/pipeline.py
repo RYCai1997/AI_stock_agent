@@ -10,7 +10,7 @@ from .config import SelectorConfig
 from .scoring import MOMENTUM_COLUMNS, factor_profile, score_frame
 
 
-MARKETS = {"A", "HK", "US"}
+MARKETS = {"A"}
 DATE_COLUMNS = ["universe_as_of", "fundamental_as_of", "price_as_of"]
 IDENTITY_COLUMNS = ["market", "ticker", "company", "industry_l1", "industry_l2"]
 RISK_COLUMNS = ["price", "ema200", "volatility_1y", "max_drawdown_6m", "avg_daily_turnover"]
@@ -25,7 +25,7 @@ def validate_input(
     required_columns = IDENTITY_COLUMNS + DATE_COLUMNS + factor_columns + RISK_COLUMNS
     normalized_market = market.upper()
     if normalized_market not in MARKETS:
-        raise ValueError(f"unsupported market: {market}; choose A, HK or US")
+        raise ValueError(f"unsupported market: {market}; the official release supports A only")
     missing = sorted(set(required_columns) - set(frame.columns))
     if missing:
         raise ValueError(f"input is missing required columns: {missing}")

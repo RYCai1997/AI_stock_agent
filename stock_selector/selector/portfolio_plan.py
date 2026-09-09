@@ -19,7 +19,7 @@ def build_portfolio_plan(
     strategy: OfficialStrategy = OFFICIAL_STRATEGY,
     overheated: bool = False,
 ) -> pd.DataFrame:
-    """Return at most three fixed-10% ideas; this never places an order."""
+    """Return at most five fixed-6% ideas; this never places an order."""
     eligible = scored[scored["actionable_candidate"].astype(bool)].copy()
     eligible = eligible.sort_values(
         ["candidate_rank", "momentum_score", "ticker"],

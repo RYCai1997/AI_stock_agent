@@ -31,7 +31,7 @@ python stock_selector\run_official_strategy.py --as-of 2026-09-09 `
 - `candidates.csv`：全部股票、指标、排名和排除原因；
 - `selected.csv`：Q/V/M合格池；
 - `actionable.csv`：同时通过市场和个股趋势确认的候选；
-- `portfolio_plan.csv`：最多3只、每只10%的人工审批计划；
+- `portfolio_plan.csv`：最多5只、每只6%的人工审批计划；
 - `holding_review.csv`：已有持仓的止损线、资格和月度退出复核；
 - `official_run_metadata.json`：固定策略版本、参数和数据日期。
 
@@ -45,9 +45,10 @@ python stock_selector\run_official_strategy.py --as-of 2026-09-09 `
 
 ## 目录
 
-- `stock_selector/`：唯一正式运行系统及其回顾测试；
-- `llm_trading_agent/`：已停用的旧LLM/币圈实验，仅保留历史研究证据；旧启动入口会转向或提示正式系统；
-- `baseline_trend/`：已停用的价格策略研究证据，不属于当前运行路径；
+- `stock_selector/`：唯一正式运行系统、测试和组合宽度验证报告；
+- `archive/legacy/`：旧LLM、币圈和纯价格策略，只用于历史追溯；
+- `archive/research/`：A股实验脚本、美股适配和旧跨市场工具；
+- `archive/planning/`：已经完成的历史重构计划；
 - `_ref_daily_stock_analysis/`：本地外部参考，不纳入本仓库追踪。
 
 旧策略不会被正式入口导入或调用。Git历史保留完整回退能力。

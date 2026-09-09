@@ -1,4 +1,4 @@
-"""Point-in-time, cross-market stock selector."""
+"""Official point-in-time CSI 300 stock selector."""
 
 from .config import SelectorConfig
 from .pipeline import run_selection

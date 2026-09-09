@@ -6,20 +6,8 @@ import pandas as pd
 from .config import SelectorConfig
 
 
-QUALITY_COLUMNS = ["roic", "fcf_margin", "eps_growth_std"]
-VALUE_COLUMNS = ["earnings_yield", "fcf_yield", "book_to_price"]
 MOMENTUM_COLUMNS = ["mom_6_1", "mom_12_1"]
 FACTOR_PROFILES = {
-    "us_standard": {
-        "quality": ["roic", "fcf_margin", "eps_growth_std"],
-        "value": ["earnings_yield", "fcf_yield", "book_to_price"],
-        "labels": {
-            "efficiency": "ROIC",
-            "cashflow_margin": "FCF margin",
-            "stability": "EPS growth stability",
-            "cashflow_yield": "FCF yield",
-        },
-    },
     "a_share_v1": {
         "quality": ["roe", "cfo_to_revenue", "eps_growth_std"],
         "value": ["earnings_yield", "net_cashflow_yield", "book_to_price"],

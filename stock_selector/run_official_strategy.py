@@ -20,6 +20,11 @@ BASE_DIR = Path(__file__).resolve().parent
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run frozen CSI300 Q/V/M timing strategy")
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {OFFICIAL_STRATEGY.strategy_version}",
+    )
     parser.add_argument("--as-of", default=str(date.today()))
     parser.add_argument("--output", type=Path)
     parser.add_argument("--cache-dir", type=Path)
