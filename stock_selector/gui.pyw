@@ -20,7 +20,7 @@ APP_DIR = Path(__file__).resolve().parent
 RUNNER = APP_DIR / "run_official_strategy.py"
 DEFAULT_OUTPUT_ROOT = APP_DIR / "outputs" / "official"
 DEFAULT_CACHE = APP_DIR / "outputs" / "official_provider_cache"
-GUI_VERSION = "1.0.1"
+GUI_VERSION = "1.0.2"
 
 
 def _percent(value: object, digits: int = 1) -> str:
