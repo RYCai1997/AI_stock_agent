@@ -1,7 +1,4 @@
 @echo off
-REM ============================================
-REM  Mode 2: One-shot Backtest since START_DATE
-REM ============================================
-cd /d "%~dp0"
-python main.py --mode backtest
+echo The legacy crypto backtest entry is retired.
+echo Historical research remains available through Git history and reports.
 pause

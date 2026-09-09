@@ -1,8 +1,18 @@
 # 跨市场择时选股器 V1
 
+> **正式状态（2026-09-09）**：A股入口已固定为`A_CSI300_QVM_TIMING_V1`，完整规则见根目录`OFFICIAL_STRATEGY.md`。正式运行使用`run_official_strategy.py`；其余市场适配和回测脚本只作为研究工具。
+
 这是新项目主线。V1接收某一历史时点已经准备好的股票池与指标CSV，输出完整候选表；它不会连接券商、不会下单，也不会让LLM改变评分或仓位。
 
 ## 使用方式
+
+正式A股运行：
+
+```powershell
+python run_official_strategy.py --as-of 2026-09-09
+```
+
+可选传入`--holdings examples\holdings_template.csv`，同时生成已有持仓月度复核。
 
 ```powershell
 python run_selector.py --market US --as-of 2025-07-15 --input examples\input_template.csv --output outputs\us_2025-07-15
@@ -70,9 +80,9 @@ python test_a_requalification_exit.py `
   --output outputs\a_requalification_exit_demo
 ```
 
-月度跌出Q/V/M名单只产生预警；只有个股EMA200也确认破坏时才退出。当前三个有效节点
-中，该规则小幅降低回撤但未提高平均收益，因此仍属于实验规则。结果和方法边界见
-`A_REQUALIFICATION_EXIT_DEMO.md`。
+月度跌出Q/V/M名单只产生预警；只有个股EMA200也确认破坏时才退出。这一确认式退出
+已纳入正式V1，但补充节点没有证明它能增加收益，因此应视为风险控制和执行纪律，
+而不是收益来源。实验结果和方法边界见`A_REQUALIFICATION_EXIT_DEMO.md`。
 
 ## 输入
 
@@ -91,6 +101,9 @@ python test_a_requalification_exit.py `
 - `selected.csv`：通过Q/V/M两阶段筛选的候选池，不受市场趋势参数影响；
 - `actionable.csv`：在Q/V/M入选基础上，市场与个股趋势均确认的候选；
 - `metadata.json`：参数、数据日期范围、数量漏斗及模型边界。
+- `portfolio_plan.csv`：最多3只、每只10%，并明确立即进入人工审批或等待5个交易日；
+- `holding_review.csv`：已有持仓的止损线、资格状态、退出动作和连续确认状态；
+- `official_run_metadata.json`：正式策略版本、固定参数、市场20日涨幅和过热等待状态。
 - 多节点测试另输出 `nodes.csv`、`forward_outcomes.csv` 和 `portfolio_summary.csv`。
 - 月度复核实验另输出逐股票退出结果、逐月决策、复核漏斗、汇总和元数据。
 

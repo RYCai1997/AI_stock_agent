@@ -133,6 +133,7 @@ def _price_metrics_from_frame(frame: pd.DataFrame, as_of: str) -> dict[str, Any]
     return {
         "price_as_of": str(close.index[-1].date()),
         "price": float(close.iloc[-1]),
+        "return_20d": float(close.iloc[-1] / close.iloc[-21] - 1.0) if len(close) >= 21 else None,
         "ema200": float(close.ewm(span=200, adjust=False, min_periods=200).mean().iloc[-1]) if len(close) >= 200 else None,
         "volatility_1y": float(returns.tail(252).std(ddof=1) * math.sqrt(252)) if len(returns) >= 60 else None,
         "max_drawdown_6m": float((recent / recent.cummax() - 1.0).min()),
@@ -175,6 +176,7 @@ def _market_trend(bs: Any, as_of: str) -> tuple[str, dict[str, Any]]:
     return status, {
         "benchmark": "沪深300", "code": "sh.000300", "price_as_of": data["price_as_of"],
         "close": data["price"], "ema200": data["ema200"],
+        "return_20d": data["return_20d"],
     }
 
 

@@ -11,9 +11,12 @@ from test_a_risk_rules import market_is_overheated, simulate_rule
 from test_a_requalification_exit import simulate_policy_exit
 from selector.config import SelectorConfig
 from selector.exit_policy import evaluate_monthly_exit
+from selector.holding_review import review_holdings
 from selector.pipeline import run_selection, validate_input
+from selector.portfolio_plan import build_portfolio_plan
 from selector.providers.a_baostock import _price_metrics_from_frame, _upgrade_cached_row
 from selector.providers.us_sec_yahoo import _annual_records
+from selector.strategy import OFFICIAL_STRATEGY
 
 
 def sample_frame(rows: int = 20) -> pd.DataFrame:
@@ -48,6 +51,57 @@ def sample_frame(rows: int = 20) -> pd.DataFrame:
 
 
 class SelectorTests(unittest.TestCase):
+    def test_official_strategy_parameters_are_frozen(self) -> None:
+        strategy = OFFICIAL_STRATEGY
+        config = strategy.selector_config()
+        self.assertEqual(strategy.strategy_id, "A_CSI300_QVM_TIMING_V1")
+        self.assertEqual(strategy.instrument_mode, "spot_long_only")
+        self.assertEqual(strategy.fixed_position_fraction, 0.10)
+        self.assertEqual(strategy.max_new_exposure_per_window, 0.30)
+        self.assertEqual(strategy.stop_loss_fraction, 0.10)
+        self.assertEqual(config.quality_quantile, 0.50)
+        self.assertEqual(config.value_min_score, 20.0)
+        self.assertEqual(config.momentum_top_fraction, 0.20)
+
+    def test_portfolio_plan_limits_window_to_three_fixed_positions(self) -> None:
+        frame = sample_frame(50).rename(columns={
+            "roic": "roe", "fcf_margin": "cfo_to_revenue",
+            "fcf_yield": "net_cashflow_yield",
+        })
+        frame["market"] = "A"
+        with tempfile.TemporaryDirectory() as folder:
+            scored, _ = run_selection(
+                frame, "A", "2025-07-15", Path(folder), "up",
+                OFFICIAL_STRATEGY.selector_config(),
+            )
+        plan = build_portfolio_plan(scored)
+        self.assertLessEqual(len(plan), 3)
+        self.assertTrue(plan["target_fraction"].eq(0.10).all())
+        self.assertLessEqual(plan["target_fraction"].sum(), 0.30 + 1e-12)
+        self.assertTrue(plan["approval_status"].eq("REQUIRES_HUMAN_APPROVAL").all())
+
+    def test_holding_review_outputs_stop_and_stateful_exit(self) -> None:
+        scored = pd.DataFrame([{
+            "ticker": "sh.600000", "company": "Example", "price": 90.0,
+            "above_ema200": False, "fundamental_candidate": False,
+            "security_eligible": True, "model_supported": True,
+        }])
+        holdings = pd.DataFrame([{
+            "ticker": "sh.600000", "entry_date": "2025-01-02", "entry_price": 100.0,
+            "nonselected_streak": 1, "below_ema_streak": 1,
+        }])
+        result = review_holdings(holdings, scored, "2025-03-01", "up")
+        self.assertEqual(result.loc[0, "action"], "exit")
+        self.assertAlmostEqual(result.loc[0, "stop_loss_price"], 90.0)
+        self.assertEqual(result.loc[0, "approval_status"], "REQUIRES_HUMAN_APPROVAL")
+
+    def test_holding_review_blocks_future_entry_date(self) -> None:
+        holdings = pd.DataFrame([{
+            "ticker": "sh.600000", "entry_date": "2025-03-02", "entry_price": 100.0,
+        }])
+        with self.assertRaisesRegex(ValueError, "entry date after"):
+            review_holdings(holdings, pd.DataFrame(columns=["ticker"]), "2025-03-01", "up")
+
     def test_monthly_policy_exit_uses_next_session_open(self) -> None:
         dates = pd.date_range("2025-07-15", periods=140, freq="B")
         prices = pd.DataFrame({
@@ -78,6 +132,27 @@ class SelectorTests(unittest.TestCase):
         after = _price_metrics_from_frame(changed_future, as_of)
         self.assertEqual(before["price"], after["price"])
         self.assertEqual(before["mom_12_1"], after["mom_12_1"])
+        self.assertEqual(before["return_20d"], after["return_20d"])
+
+    def test_portfolio_plan_marks_five_session_overheat_delay(self) -> None:
+        frame = sample_frame()
+        with tempfile.TemporaryDirectory() as folder:
+            scored, _ = run_selection(
+                frame, "US", "2025-07-15", Path(folder), market_trend="up"
+            )
+        plan = build_portfolio_plan(scored, overheated=True)
+        self.assertTrue(plan["entry_status"].eq("WAIT_5_SESSIONS").all())
+        self.assertTrue(plan["entry_delay_sessions"].eq(5).all())
+
+    def test_portfolio_plan_is_ready_when_market_is_not_overheated(self) -> None:
+        frame = sample_frame()
+        with tempfile.TemporaryDirectory() as folder:
+            scored, _ = run_selection(
+                frame, "US", "2025-07-15", Path(folder), market_trend="up"
+            )
+        plan = build_portfolio_plan(scored, overheated=False)
+        self.assertTrue(plan["entry_status"].eq("READY_AFTER_HUMAN_APPROVAL").all())
+        self.assertTrue(plan["entry_delay_sessions"].eq(0).all())
 
     def test_exit_policy_rank_loss_alone_is_warning_not_exit(self) -> None:
         row = pd.Series({

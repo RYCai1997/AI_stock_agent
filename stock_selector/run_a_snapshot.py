@@ -4,9 +4,9 @@ import argparse
 import json
 from pathlib import Path
 
-from selector.config import SelectorConfig
 from selector.pipeline import run_selection
 from selector.providers import build_a_metrics
+from selector.strategy import OFFICIAL_STRATEGY
 
 
 def main() -> None:
@@ -22,7 +22,7 @@ def main() -> None:
     metrics.to_csv(args.output / "raw_metrics.csv", index=False)
     _, selector = run_selection(
         metrics, "A", args.as_of, args.output, provider["market_trend"],
-        SelectorConfig(factor_profile="a_share_v1"),
+        OFFICIAL_STRATEGY.selector_config(),
     )
     combined = {"provider": provider, "selector": selector}
     (args.output / "run_metadata.json").write_text(

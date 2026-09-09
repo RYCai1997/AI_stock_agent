@@ -23,6 +23,10 @@ launcher_gui.pyw — AI 量化交易 Agent 图形启动面板（双击即用）
       （time,equity,price；买入持有线由面板以首行价为基准绘制）。
 """
 
+raise SystemExit(
+    "This legacy launcher is retired. Run ..\\Launch_Stock_System.bat instead."
+)
+
 import os
 import sys
 import csv

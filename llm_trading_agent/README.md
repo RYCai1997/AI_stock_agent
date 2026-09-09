@@ -1,4 +1,8 @@
-# LLM 驱动量化交易 Agent（多币种 · 多周期 · Paper Trading）
+# 已停用：LLM驱动量化交易Agent历史资料
+
+> **已停用**：本目录不再是运行系统。`main.py`和旧GUI入口已禁用，旧批处理会转向根目录`Launch_Stock_System.bat`或直接提示停用。代码仅用于历史研究复核，不得用于当前交易信号。
+
+> **阅读边界**：以下内容原样保留作为旧版本说明，其中的安装、启动和回测命令均已失效，不应再执行。当前唯一入口是根目录`Launch_Stock_System.bat`，唯一正式规则见根目录`OFFICIAL_STRATEGY.md`。
 
 > 按所选周期（默认 4H，支持 15m/30m/1h/2h/4h/6h/8h/12h/1d）拉取 Binance 行情 →
 > 计算技术指标 → 生成「战情简报」→ 交给 **DeepSeek**（deepseek-chat / deepseek-reasoner，

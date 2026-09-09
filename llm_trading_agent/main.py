@@ -12,6 +12,10 @@ main.py —— 程序主入口（调度器 + 状态机）
     → 执行层强制风控撮合 → 记录日志 → 持久化状态
 """
 
+raise SystemExit(
+    "This legacy LLM/crypto strategy is retired. Run ..\\Launch_Stock_System.bat instead."
+)
+
 import argparse
 import hashlib
 import json

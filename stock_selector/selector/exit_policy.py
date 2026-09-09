@@ -6,6 +6,8 @@ from dataclasses import dataclass
 
 import pandas as pd
 
+from .strategy import OFFICIAL_STRATEGY
+
 
 @dataclass(frozen=True)
 class ExitDecision:
@@ -45,7 +47,10 @@ def evaluate_monthly_exit(
 
     if not above_ema and market_trend != "up":
         return ExitDecision("exit", "market and stock below EMA200", 0, 0)
-    if not above_ema and (below_ema_streak >= 2 or nonselected_streak >= 2):
+    confirmations = OFFICIAL_STRATEGY.confirmation_reviews
+    if not above_ema and (
+        below_ema_streak >= confirmations or nonselected_streak >= confirmations
+    ):
         return ExitDecision("exit", "selection and EMA200 break confirmed", 0, 0)
     if selected and above_ema:
         return ExitDecision("hold", "still qualified", 0, 0)

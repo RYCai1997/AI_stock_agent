@@ -1,31 +1,53 @@
-# AI Stock Agent：研究区整理说明
+# A股现货择时选股系统
 
-## 当前定位
+本仓库当前只有一个正式策略：`A_CSI300_QVM_TIMING_V1`。它以沪深300历史成分为股票池，使用Quality、行业内Value和中期Momentum筛选标的，再以沪深300及个股EMA200确认入场时机。
 
-本目录将逐步从“LLM价格交易实验”重构为一个**人工触发的跨市场择时选股器**：用户指定市场与时点，系统建立当时可得的股票池，输出每只候选股票的行业、Quality、Value、Momentum、风险和数据日期，供人工筛选。系统不直接下单，LLM不决定仓位。
+完整规则见 [OFFICIAL_STRATEGY.md](OFFICIAL_STRATEGY.md)。
 
-目标市场：
+## 运行
 
-- A股
-- 港股／恒生相关股票池
-- 美股
+Windows可双击：
 
-## 当前目录
+```text
+Install_Stock_System.bat   （首次安装）
+Launch_Stock_System.bat
+```
 
-- `stock_selector/`：新的跨市场择时选股器主线；当前支持读取时间截断后的指标CSV，输出Q/V/M候选池、趋势确认名单和审计元数据。
-- `llm_trading_agent/`：现有交易、ETF轮动和技术指标实验。保留用于复核，后续拆取可复用的数据接口、风控和回测代码；不再作为新系统的主架构。
-- `baseline_trend/`：早期价格趋势基线及报告，暂列为legacy研究证据。
-- `_ref_daily_stock_analysis/`：外部开源项目参考副本，不作为本项目源代码，也不纳入本仓库追踪。
-- `REORGANIZATION_PLAN.md`：目标架构、保留／归档／删除建议和迁移边界。
+或运行：
 
-## Git边界
+```powershell
+python stock_selector\run_official_strategy.py --as-of 2026-09-09
+```
 
-Git追踪源码、测试、配置模板、规格说明和人工整理的研究结论。以下内容不追踪：
+复核已有持仓时增加：
 
-- `.env`与任何密钥；
-- `.venv`、缓存；
-- 实时状态、日志；
-- 批量生成的回测曲线和运行目录；
-- 外部参考仓库 `_ref_daily_stock_analysis/`。
+```powershell
+python stock_selector\run_official_strategy.py --as-of 2026-09-09 `
+  --holdings stock_selector\examples\holdings_template.csv
+```
 
-Git首个基线保存了重构前的可复核版本；后续提交单独追踪新选股器。任何提交都不表示旧策略已经验证有效，也不表示允许真实交易。
+默认结果保存至`stock_selector/outputs/official/<日期>/`，包括：
+
+- `candidates.csv`：全部股票、指标、排名和排除原因；
+- `selected.csv`：Q/V/M合格池；
+- `actionable.csv`：同时通过市场和个股趋势确认的候选；
+- `portfolio_plan.csv`：最多3只、每只10%的人工审批计划；
+- `holding_review.csv`：已有持仓的止损线、资格和月度退出复核；
+- `official_run_metadata.json`：固定策略版本、参数和数据日期。
+
+## 安全边界
+
+- A股现货long/flat，不做杠杆、合约或卖空；
+- 不连接券商，不自动下单；
+- LLM不参与评分、排名、仓位或订单；
+- 所有建议都要求人工确认；
+- 任何晚于筛选日期的数据都会被拒绝。
+
+## 目录
+
+- `stock_selector/`：唯一正式运行系统及其回顾测试；
+- `llm_trading_agent/`：已停用的旧LLM/币圈实验，仅保留历史研究证据；旧启动入口会转向或提示正式系统；
+- `baseline_trend/`：已停用的价格策略研究证据，不属于当前运行路径；
+- `_ref_daily_stock_analysis/`：本地外部参考，不纳入本仓库追踪。
+
+旧策略不会被正式入口导入或调用。Git历史保留完整回退能力。
