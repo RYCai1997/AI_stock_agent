@@ -13,6 +13,10 @@ Install_Stock_System.bat   （首次安装）
 Launch_Stock_System.bat
 ```
 
+`Launch_Stock_System.bat`会打开中文桌面页面。页面可选择筛选日期和可选持仓CSV，显示Top 5新建仓计划、持仓复核、关键状态与运行日志，并可打开完整候选表及结果目录。计算在后台执行，页面不会因数据获取而冻结。
+
+GUI与命令行调用同一个正式策略入口；GUI只是展示与操作层，不改变任何选股、仓位或退出参数。
+
 或运行：
 
 ```powershell

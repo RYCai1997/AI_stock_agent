@@ -4,6 +4,10 @@
 
 ## 运行
 
+普通使用可从项目根目录双击`Launch_Stock_System.bat`进入中文GUI。选择日期后点击“开始筛选”；如需月度持仓复核，可选取`examples/holdings_template.csv`格式的持仓文件。页面只生成研究计划，不会连接券商或下单。
+
+命令行审计入口继续保留：
+
 从项目根目录运行：
 
 ```powershell
@@ -23,6 +27,7 @@ python stock_selector\run_official_strategy.py --as-of YYYY-MM-DD
 ## 正式代码
 
 - `run_official_strategy.py`：唯一入口；
+- `gui.pyw`：中文桌面操作与结果展示层；
 - `selector/strategy.py`：冻结参数；
 - `selector/providers/a_baostock.py`：历史沪深300、行情和财务数据；
 - `selector/scoring.py`：Q/V/M评分；
