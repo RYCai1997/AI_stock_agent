@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
@@ -9,9 +10,14 @@ import pandas as pd
 from selector.config import SelectorConfig
 from selector.exit_policy import evaluate_monthly_exit
 from selector.holding_review import review_holdings
+from selector.holdings_store import (
+    latest_holdings_file, load_holdings, normalize_ticker, reviewed_snapshot,
+    save_holdings,
+)
 from selector.pipeline import run_selection, validate_input
 from selector.portfolio_plan import build_portfolio_plan
 from selector.providers.a_baostock import _price_metrics_from_frame, _upgrade_cached_row
+from selector.providers.a_baostock import quote_from_frames
 from selector.strategy import OFFICIAL_STRATEGY
 
 
@@ -44,6 +50,11 @@ def sample_frame(rows: int = 20) -> pd.DataFrame:
             "avg_daily_turnover": 10_000_000,
         })
     return pd.DataFrame(records)
+
+
+def raw_quotes(price, when="2025-03-01"):
+    return {"sh.600000": {"price": price, "price_basis": "unadjusted", "price_as_of": when,
+                           "basis_changed": False, "tradestatus": "1"}}
 
 
 class SelectorTests(unittest.TestCase):
@@ -89,10 +100,81 @@ class SelectorTests(unittest.TestCase):
             "ticker": "sh.600000", "entry_date": "2025-01-02", "entry_price": 100.0,
             "nonselected_streak": 1, "below_ema_streak": 1,
         }])
-        result = review_holdings(holdings, scored, "2025-03-01", "up")
+        result = review_holdings(holdings, scored, "2025-03-01", "up", quotes=raw_quotes(90))
         self.assertEqual(result.loc[0, "action"], "exit")
         self.assertAlmostEqual(result.loc[0, "stop_loss_price"], 90.0)
         self.assertEqual(result.loc[0, "approval_status"], "REQUIRES_HUMAN_APPROVAL")
+
+    def test_holding_review_preserves_quantity_and_flags_stop_exit(self) -> None:
+        scored = pd.DataFrame([{
+            "ticker": "sh.600000", "company": "Example", "price": 89.0,
+            "above_ema200": True, "fundamental_candidate": True,
+            "security_eligible": True, "model_supported": True,
+        }])
+        holdings = pd.DataFrame([{
+            "ticker": "sh.600000", "entry_date": "2025-01-02",
+            "entry_price": 100.0, "quantity": 300,
+        }])
+        result = review_holdings(holdings, scored, "2025-03-01", "up", quotes=raw_quotes(89))
+        self.assertEqual(result.loc[0, "quantity"], 300)
+        self.assertEqual(result.loc[0, "position_cost"], 30_000)
+        self.assertEqual(result.loc[0, "action"], "exit")
+        self.assertEqual(result.loc[0, "reason"], "latest close at or below stop loss threshold")
+        self.assertEqual(result.loc[0, "signal_date"], "2025-03-01")
+        self.assertEqual(result.loc[0, "suggested_execution"], "NEXT_TRADABLE_OPEN")
+
+    def test_repeated_run_in_same_month_does_not_add_confirmation(self) -> None:
+        scored = pd.DataFrame([{
+            "ticker": "sh.600000", "company": "Example", "price": 95.0,
+            "above_ema200": False, "fundamental_candidate": False,
+            "security_eligible": True, "model_supported": True,
+        }])
+        holdings = pd.DataFrame([{
+            "ticker": "sh.600000", "entry_date": "2025-01-02",
+            "entry_price": 100.0, "quantity": 100,
+            "nonselected_streak": 1, "below_ema_streak": 1,
+            "last_review_date": "2025-03-01",
+        }])
+        result = review_holdings(holdings, scored, "2025-03-20", "up", quotes=raw_quotes(95, "2025-03-20"))
+        self.assertEqual(result.loc[0, "action"], "hold")
+        self.assertEqual(result.loc[0, "nonselected_streak"], 1)
+        self.assertEqual(result.loc[0, "below_ema_streak"], 1)
+
+    def test_holdings_snapshots_are_validated_and_latest_is_found(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            directory = Path(folder)
+            first = save_holdings([{
+                "ticker": "600000", "company": "Example",
+                "entry_date": "2025-01-02", "entry_price": 10,
+                "quantity": 100,
+            }], directory)
+            loaded = load_holdings(first)
+            self.assertEqual(loaded[0]["ticker"], "sh.600000")
+            self.assertEqual(loaded[0]["quantity"], 100)
+            self.assertEqual(latest_holdings_file(directory), first)
+        self.assertEqual(normalize_ticker("000001"), "sz.000001")
+
+    def test_reviewed_snapshot_carries_confirmation_state_forward(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            directory = Path(folder)
+            source = save_holdings([{
+                "ticker": "600000", "company": "Example",
+                "entry_date": "2025-01-02", "entry_price": 10,
+                "quantity": 100,
+            }], directory)
+            review = directory / "review.csv"
+            pd.DataFrame([{
+                "ticker": "sh.600000", "company": "Example",
+                "review_date": str(date.today()), "action": "hold",
+                "reason": "qualification warning; trend break not confirmed",
+                "nonselected_streak": 1, "below_ema_streak": 1,
+            }]).to_csv(review, index=False)
+            self.assertIsNone(reviewed_snapshot(source, review, directory))
+            updated = reviewed_snapshot(source, review, directory, current_run=True)
+            self.assertIsNotNone(updated)
+            row = load_holdings(updated)[0]
+            self.assertEqual(row["last_review_date"], str(date.today()))
+            self.assertEqual(row["nonselected_streak"], 1)
 
     def test_holding_review_blocks_future_entry_date(self) -> None:
         holdings = pd.DataFrame([{

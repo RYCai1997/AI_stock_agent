@@ -193,10 +193,14 @@ def build_a_metrics(
         raise RuntimeError(f"Baostock login failed: {login.error_msg}")
     try:
         universe = _rows(bs.query_hs300_stocks(as_of))
+        if not universe:
+            raise ValueError("no verified CSI 300 membership snapshot")
+        member_codes = [row["code"] for row in universe]
         original_members = len(universe)
         membership_date = max(row["updateDate"] for row in universe)
         industry_rows = _rows(bs.query_stock_industry(date=as_of))
         industries = {row["code"]: row for row in industry_rows}
+        trend, benchmark = _market_trend(bs, as_of)
         if limit:
             universe = universe[:limit]
         output = []
@@ -214,7 +218,8 @@ def build_a_metrics(
                         and cached_row is not None
                         and cached_row.get("eps_growth_std") is None
                     )
-                    if cached_row and not legacy_missing_stability:
+                    if (cached_row and not legacy_missing_stability
+                            and cached_row.get("price_as_of") == benchmark.get("price_as_of")):
                         cache_hits += 1
                         output.append(cached_row)
                         continue
@@ -266,10 +271,10 @@ def build_a_metrics(
             frame.groupby("industry_l2")["ticker"].transform("size") >= 5, frame["industry_l1"]
         )
         frame["relative_strength"] = frame["mom_12_1"] - frame.groupby(groups)["mom_12_1"].transform("median")
-        trend, benchmark = _market_trend(bs, as_of)
         metadata = {
             "market": "A", "universe": "CSI 300", "as_of": as_of,
             "membership_snapshot": membership_date, "original_members": original_members,
+            "member_codes": member_codes,
             "requested_members": len(universe), "built_rows": len(frame), "errors": errors,
             "cache_hits": cache_hits, "market_trend": trend,
             "benchmark": benchmark,
@@ -282,3 +287,50 @@ def build_a_metrics(
         return frame, metadata
     finally:
         bs.logout()
+
+
+def quote_from_frames(raw: pd.DataFrame, adjusted: pd.DataFrame, start: str, end: str) -> dict:
+    """Unadjusted execution price; flag basis changes instead of inventing cost adjustments."""
+    def clean(frame):
+        frame = frame.copy()
+        frame = frame[frame["date"].between(start, end)]
+        frame["close"] = pd.to_numeric(frame["close"], errors="coerce")
+        return frame.sort_values("date").drop_duplicates("date").set_index("date")
+    r, a = clean(raw), clean(adjusted)
+    joined = r[["close"]].join(a[["close"]], lsuffix="_raw", rsuffix="_adj").dropna()
+    if joined.empty or start not in joined.index:
+        raise ValueError("cost basis date has no comparable trading price")
+    ratios = joined["close_raw"] / joined["close_adj"]
+    if not np.isfinite(ratios).all() or (joined <= 0).any().any():
+        raise ValueError("invalid execution price")
+    latest = str(joined.index[-1])
+    return {"price": float(joined.iloc[-1]["close_raw"]), "price_as_of": latest,
+            "tradestatus": str(r.loc[latest, "tradestatus"]),
+            "basis_changed": bool((abs(ratios / ratios.iloc[0] - 1) > 1e-5).any()),
+            "price_basis": "unadjusted"}
+
+
+def fetch_holding_quotes(holdings: pd.DataFrame, as_of: str) -> dict:
+    """Fetch held names even when outside the selection universe. Errors remain explicit."""
+    if holdings.empty:
+        return {}
+    import baostock as bs
+    login = bs.login()
+    if login.error_code != "0":
+        return {str(h.ticker): {"error": login.error_msg} for h in holdings.itertuples()}
+    quotes = {}
+    try:
+        for h in holdings.to_dict("records"):
+            code = str(h["ticker"])
+            start = h.get("cost_basis_date")
+            start = str(start) if pd.notna(start) and start else str(h["entry_date"])
+            try:
+                frames = [pd.DataFrame(_rows(bs.query_history_k_data_plus(
+                    code, "date,close,tradestatus", start_date=start, end_date=as_of,
+                    frequency="d", adjustflag=flag))) for flag in ("3", "2")]
+                quotes[code] = quote_from_frames(*frames, start, as_of)
+            except Exception as exc:
+                quotes[code] = {"error": str(exc)}
+    finally:
+        bs.logout()
+    return quotes

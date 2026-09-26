@@ -4,7 +4,7 @@
 
 ## 运行
 
-普通使用可从项目根目录双击`Launch_Stock_System.bat`进入中文GUI。选择日期后点击“开始筛选”；如需月度持仓复核，可选取`examples/holdings_template.csv`格式的持仓文件。页面只生成研究计划，不会连接券商或下单。
+普通使用可从项目根目录双击`Launch_Stock_System.bat`进入中文GUI。点击“当前持仓…”可以手工新增持仓，或导入最近一次Top 5计划后填写实际成交均价和股数。每次保存都会在`user_data/holdings/`生成带时间戳的本地快照；GUI以后自动使用最新快照进行复核。页面只生成研究计划，不会连接券商或下单。
 
 命令行审计入口继续保留：
 
@@ -34,6 +34,7 @@ python stock_selector\run_official_strategy.py --as-of YYYY-MM-DD
 - `selector/pipeline.py`：日期验证、趋势确认和候选输出；
 - `selector/portfolio_plan.py`：Top 5、固定6%计划；
 - `selector/holding_review.py`：已有持仓月度复核；
+- `selector/holdings_store.py`：本地持仓快照、校验和复核状态延续；
 - `tests/test_selector.py`：正式版测试。
 
 旧系统和研究工具已经移动到根目录`archive/`，不会被正式入口导入。
