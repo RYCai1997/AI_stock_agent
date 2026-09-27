@@ -12,6 +12,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from ..run_feedback import ProgressCallback
+
 
 INDUSTRY_SECTIONS = {
     "A": "A 农林牧渔业", "B": "B 采矿业", "C": "C 制造业", "D": "D 公用事业",
@@ -181,26 +183,36 @@ def _market_trend(bs: Any, as_of: str) -> tuple[str, dict[str, Any]]:
 
 
 def build_a_metrics(
-    as_of: str, limit: int = 0, cache_dir: Path | None = None
+    as_of: str, limit: int = 0, cache_dir: Path | None = None,
+    progress: ProgressCallback | None = None,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     """Download one historical CSI 300 snapshot with disclosure-date controls."""
     try:
         import baostock as bs
     except ImportError as exc:
         raise RuntimeError("baostock is required; install stock_selector/requirements.txt") from exc
+    def report(stage: int, completed: int, total: int, detail: str) -> None:
+        if progress:
+            progress(stage, completed, total, detail)
+
+    report(1, 0, 4, "正在连接数据源")
     login = bs.login()
     if login.error_code != "0":
         raise RuntimeError(f"Baostock login failed: {login.error_msg}")
     try:
+        report(1, 1, 4, "已连接；正在获取沪深300成分")
         universe = _rows(bs.query_hs300_stocks(as_of))
         if not universe:
             raise ValueError("no verified CSI 300 membership snapshot")
         member_codes = [row["code"] for row in universe]
         original_members = len(universe)
         membership_date = max(row["updateDate"] for row in universe)
+        report(1, 2, 4, "已获取股票池；正在获取行业")
         industry_rows = _rows(bs.query_stock_industry(date=as_of))
         industries = {row["code"]: row for row in industry_rows}
+        report(1, 3, 4, "已获取行业；正在获取沪深300行情")
         trend, benchmark = _market_trend(bs, as_of)
+        report(1, 4, 4, "股票池、行业及基准已就绪")
         if limit:
             universe = universe[:limit]
         output = []
@@ -208,6 +220,7 @@ def build_a_metrics(
         cache_hits = 0
         for position, item in enumerate(universe, 1):
             code = item["code"]
+            report(2, position - 1, len(universe), f"正在处理 {code} {item['code_name']}")
             cache_path = cache_dir / f"{as_of}_{code}.json" if cache_dir else None
             if cache_path and cache_path.exists():
                 cached = json.loads(cache_path.read_text(encoding="utf-8"))
@@ -222,6 +235,8 @@ def build_a_metrics(
                             and cached_row.get("price_as_of") == benchmark.get("price_as_of")):
                         cache_hits += 1
                         output.append(cached_row)
+                        report(2, position, len(universe),
+                               f"{code} 缓存已读取；成功{len(output)}，错误{len(errors)}，缓存{cache_hits}")
                         continue
                     # Provider/network errors are intentionally retried. A
                     # transient login failure must not become permanent data
@@ -231,6 +246,7 @@ def build_a_metrics(
                 industry_name = industry.get("industry") or "Unknown"
                 section = industry_name[:1]
                 quality, annual = _latest_quality(bs, code, as_of)
+                report(2, position - 1, len(universe), f"{code} 财务查询完成，正在获取行情")
                 price = _price_metrics(bs, code, as_of)
                 if quality is None:
                     raise ValueError("no profit and cash-flow report jointly filed by snapshot")
@@ -262,7 +278,9 @@ def build_a_metrics(
                 temporary = cache_path.with_suffix(".json.tmp")
                 temporary.write_text(json.dumps(cache_payload, ensure_ascii=False), encoding="utf-8")
                 temporary.replace(cache_path)
-            if position % 10 == 0 or position == len(universe):
+            report(2, position, len(universe),
+                   f"{code} {'取数失败' if code in errors else '取数完成'}；成功{len(output)}，错误{len(errors)}，缓存{cache_hits}")
+            if not progress and (position % 10 == 0 or position == len(universe)):
                 print(f"A-share provider {position}/{len(universe)} built={len(output)} errors={len(errors)}", flush=True)
         frame = pd.DataFrame(output)
         if frame.empty:
@@ -310,18 +328,27 @@ def quote_from_frames(raw: pd.DataFrame, adjusted: pd.DataFrame, start: str, end
             "price_basis": "unadjusted"}
 
 
-def fetch_holding_quotes(holdings: pd.DataFrame, as_of: str) -> dict:
+def fetch_holding_quotes(
+    holdings: pd.DataFrame, as_of: str, progress: ProgressCallback | None = None,
+) -> dict:
     """Fetch held names even when outside the selection universe. Errors remain explicit."""
     if holdings.empty:
         return {}
+    def report(completed: int, detail: str) -> None:
+        if progress:
+            progress(4, completed, len(holdings) + 2, detail)
+
     import baostock as bs
+    report(0, "正在连接持仓／计划报价数据源")
     login = bs.login()
     if login.error_code != "0":
+        report(len(holdings), "报价连接失败；已记录错误，继续复核数据风险")
         return {str(h.ticker): {"error": login.error_msg} for h in holdings.itertuples()}
     quotes = {}
     try:
-        for h in holdings.to_dict("records"):
+        for position, h in enumerate(holdings.to_dict("records"), 1):
             code = str(h["ticker"])
+            report(position - 1, f"正在获取 {code} 未复权价格与成本口径")
             start = h.get("cost_basis_date")
             start = str(start) if pd.notna(start) and start else str(h["entry_date"])
             try:
@@ -331,6 +358,7 @@ def fetch_holding_quotes(holdings: pd.DataFrame, as_of: str) -> dict:
                 quotes[code] = quote_from_frames(*frames, start, as_of)
             except Exception as exc:
                 quotes[code] = {"error": str(exc)}
+            report(position, f"{code} 报价{'失败' if 'error' in quotes[code] else '完成'}")
     finally:
         bs.logout()
     return quotes

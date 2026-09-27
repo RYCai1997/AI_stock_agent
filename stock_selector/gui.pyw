@@ -12,9 +12,11 @@ import queue
 import subprocess
 import sys
 import threading
+import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from guidance_dialogs import account_dialog, trade_dialog
+from selector.run_feedback import format_run_summary, parse_progress, progress_label, progress_percent
 
 from selector.holdings_store import (
     latest_holdings_file,
@@ -34,7 +36,7 @@ DEFAULT_CACHE = APP_DIR / "outputs" / "official_provider_cache"
 HOLDINGS_DIR = APP_DIR / "user_data" / "holdings"
 ACCOUNT_PATH = APP_DIR / "user_data" / "account.json"
 JOURNAL_PATH = APP_DIR / "user_data" / "trades.sqlite3"
-GUI_VERSION = "1.2.0"
+GUI_VERSION = "1.2.1"
 
 
 def _percent(value: object, digits: int = 1) -> str:
@@ -353,21 +355,33 @@ class StockSelectorGUI:
 
         action_row = ttk.Frame(page, style="Page.TFrame")
         action_row.pack(fill="x", pady=(0, 8))
-        self.progress = ttk.Progressbar(action_row, mode="indeterminate")
+        ttk.Label(action_row, text="当前步骤进度").pack(side="left", padx=(0, 8))
+        self.progress = ttk.Progressbar(action_row, mode="determinate", maximum=100)
         self.progress.pack(side="left", fill="x", expand=True)
         self.status_var = tk.StringVar(value="请选择日期后开始筛选。首次获取完整数据可能需要几分钟。")
-        ttk.Label(action_row, textvariable=self.status_var, style="Subtitle.TLabel").pack(side="left", padx=12)
+        ttk.Label(page, textvariable=self.status_var, style="Subtitle.TLabel",
+                  wraplength=1100).pack(fill="x", pady=(0, 8))
         self.open_candidates_button = ttk.Button(action_row, text="完整候选表", command=lambda: self._open_result("candidates.csv"), state="disabled")
         self.open_candidates_button.pack(side="right")
         self.open_folder_button = ttk.Button(action_row, text="打开结果目录", command=self._open_output, state="disabled")
         self.open_folder_button.pack(side="right", padx=(0, 8))
 
         notebook = ttk.Notebook(page)
+        self.notebook = notebook
         notebook.pack(fill="both", expand=True)
         plan_tab = ttk.Frame(notebook, padding=8)
         review_tab = ttk.Frame(notebook, padding=8)
         log_tab = ttk.Frame(notebook, padding=8)
         account_tab = ttk.Frame(notebook, padding=8)
+        self.summary_tab = ttk.Frame(notebook, padding=8)
+        notebook.add(self.summary_tab, text="  筛选汇报  ")
+        self.summary_text = tk.Text(self.summary_tab, wrap="word", relief="flat",
+                                    font=("Microsoft YaHei UI", 11), padx=12, pady=12)
+        summary_scroll = ttk.Scrollbar(self.summary_tab, command=self.summary_text.yview)
+        summary_scroll.pack(side="right", fill="y")
+        self.summary_text.configure(yscrollcommand=summary_scroll.set)
+        self.summary_text.pack(fill="both", expand=True)
+        self._set_summary("运行结束后，这里会解释取数情况、筛选数量及没有建仓计划的原因。")
         notebook.add(account_tab, text="  今日交易指导  ")
         notebook.add(plan_tab, text="  新建仓计划  ")
         notebook.add(review_tab, text="  持仓复核  ")
@@ -509,6 +523,7 @@ class StockSelectorGUI:
         self.output_dir = DEFAULT_OUTPUT_ROOT / mode / as_of / datetime.now().strftime("%H%M%S_%f")
         command = [
             _runner_python(),
+            "-u",
             "-X",
             "utf8",
             str(RUNNER),
@@ -528,10 +543,13 @@ class StockSelectorGUI:
         self.running = True
         self.cancel_requested = False
         self._append_log(f"开始运行：{as_of}\n")
-        self.status_var.set("正在获取并计算数据，请稍候…")
+        self.run_started = time.monotonic()
+        self.last_progress_at = self.run_started
+        self.progress_message = "正在启动筛选程序，等待实际进度…"
+        self.status_var.set(self.progress_message)
         self.run_button.configure(state="disabled")
         self.cancel_button.configure(state="normal")
-        self.progress.start(12)
+        self.progress.configure(value=0)
         threading.Thread(target=self._run_process, args=(command,), daemon=True).start()
 
     def _run_process(self, command: list[str]) -> None:
@@ -551,7 +569,8 @@ class StockSelectorGUI:
                 self.process.terminate()
             assert self.process.stdout is not None
             for line in self.process.stdout:
-                self.events.put(("log", line))
+                event = parse_progress(line)
+                self.events.put(("progress", event) if event else ("log", line))
             return_code = self.process.wait()
             self.events.put(("done", return_code))
         except Exception as exc:
@@ -559,31 +578,43 @@ class StockSelectorGUI:
 
     def _poll_events(self) -> None:
         try:
-            while True:
+            for _ in range(200):
                 kind, payload = self.events.get_nowait()
                 if kind == "log":
                     self._append_log(str(payload))
+                elif kind == "progress":
+                    self.progress.configure(value=progress_percent(payload))
+                    self.progress_message = progress_label(payload)
+                    self.last_progress_at = time.monotonic()
+                    self._append_log(self.progress_message + "\n")
                 elif kind == "done":
                     self._finish_run(int(payload))
                 elif kind == "error":
                     self._finish_run(-1, str(payload))
         except queue.Empty:
             pass
+        if self.running:
+            now = time.monotonic()
+            elapsed = int(now - self.run_started)
+            quiet = int(now - self.last_progress_at)
+            waiting = f" · 已{quiet}秒无新进度，正在等待数据／计算；可停止" if quiet >= 30 else ""
+            self.status_var.set(f"{self.progress_message} · 已用时{elapsed // 60}分{elapsed % 60}秒{waiting}")
         self.root.after(100, self._poll_events)
 
     def _finish_run(self, return_code: int, error: str | None = None) -> None:
         self.process = None
         self.running = False
-        self.progress.stop()
         self.run_button.configure(state="normal")
         self.cancel_button.configure(state="disabled")
         if self.cancel_requested:
             self.cancel_requested = False
             self.status_var.set("筛选已停止，未生成任何订单。")
+            self._set_summary("本次筛选已停止，结果不完整，不能判断是否有合适标的。\n进度条保留停止时的实际步骤进度。")
             return
         if return_code == 0:
             try:
                 self._load_results()
+                self.progress.configure(value=100)
                 self.status_var.set("筛选完成。请逐项人工复核后再决定是否执行。")
                 self._append_log("\n运行完成。未生成任何订单。\n")
                 return
@@ -591,6 +622,7 @@ class StockSelectorGUI:
                 error = f"结果读取失败：{exc}"
         message = error or f"运行失败，退出代码：{return_code}"
         self.status_var.set("运行失败，请查看日志。")
+        self._set_summary(f"本次筛选未完成：{message}\n不能把失败或空结果理解为没有投资机会。")
         self._append_log(f"\n{message}\n")
         messagebox.showerror("运行失败", message)
 
@@ -631,6 +663,8 @@ class StockSelectorGUI:
                 self._append_log(f"持仓复核状态已保存为最新记录：{updated}\n")
         self.open_folder_button.configure(state="normal")
         self.open_candidates_button.configure(state="normal")
+        self._set_summary(format_run_summary(metadata))
+        self.notebook.select(self.summary_tab)
 
     def _fill_plan(self, path: Path) -> None:
         with path.open("r", encoding="utf-8-sig", newline="") as handle:
@@ -678,12 +712,19 @@ class StockSelectorGUI:
             ))
 
     def _clear_results(self) -> None:
+        self._set_summary("筛选正在进行中，尚无本次结论。完成后将自动显示结果汇报。")
         for tree in (self.plan_tree, self.review_tree, self.guidance_tree):
             tree.delete(*tree.get_children())
         for key, value in self.card_values.items():
             value.set("运行中" if key == "market" else "—")
         self.open_folder_button.configure(state="disabled")
         self.open_candidates_button.configure(state="disabled")
+
+    def _set_summary(self, text: str) -> None:
+        self.summary_text.configure(state="normal")
+        self.summary_text.delete("1.0", "end")
+        self.summary_text.insert("end", text)
+        self.summary_text.configure(state="disabled")
 
     def _append_log(self, text: str) -> None:
         self.log_text.configure(state="normal")

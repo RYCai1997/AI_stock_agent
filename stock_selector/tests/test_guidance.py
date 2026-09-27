@@ -104,6 +104,7 @@ class GuidanceTests(unittest.TestCase):
         from test_selector import sample_frame
         metrics = sample_frame(100)
         provider = dict(market_trend="up", errors={}, member_codes=list(metrics.ticker),
+                        requested_members=len(metrics), built_rows=len(metrics), cache_hits=0,
                         benchmark=dict(price_as_of="2025-07-15", return_20d=.03))
         with tempfile.TemporaryDirectory() as folder:
             with patch("sys.argv", ["runner", "--as-of", "2025-07-15", "--output", folder]), \
