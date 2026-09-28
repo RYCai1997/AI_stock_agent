@@ -7,6 +7,7 @@ from math import floor, isfinite
 
 from .account import Account
 from .execution import LimitContext, fill_block_reason, stop_execution_price
+from .fees import FeeModel, ZERO_COST_MODEL
 from selector.strategy import OFFICIAL_STRATEGY
 
 
@@ -53,6 +54,7 @@ class Order:
 @dataclass
 class BacktestEngine:
     initial_cash: float
+    fee_model: FeeModel = ZERO_COST_MODEL
     account: Account = field(init=False)
     orders: list[Order] = field(default_factory=list)
     trades: list[dict] = field(default_factory=list)
@@ -102,24 +104,27 @@ class BacktestEngine:
                 if block:
                     order.execution_block_reason = block
                     continue
+                execution_price = self.fee_model.execution_price(bar.open, order.side)
+                fees = self.fee_model.fee(date, order.side, order.quantity, execution_price)
                 if order.side == "buy":
-                    if order.quantity * bar.open > self.account.cash + 1e-8:
+                    if order.quantity * execution_price + fees.total > self.account.cash + 1e-8:
                         order.status = "cancelled"
                         order.execution_block_reason = "insufficient_cash"
                         continue
-                    self.account.buy(order.ticker, order.quantity, bar.open)
+                    self.account.buy(order.ticker, order.quantity, execution_price, fees.total)
                 else:
-                    self.account.sell(order.ticker, order.quantity, bar.open)
+                    self.account.sell(order.ticker, order.quantity, execution_price, fees.total)
                 order.status = "filled"
                 order.actual_execution_date = date
-                order.execution_price = bar.open
+                order.execution_price = execution_price
                 order.execution_block_reason = None
                 self.trades.append({"ticker": order.ticker, "side": order.side,
                                     "signal_date": order.signal_date,
                                     "intended_execution_date": order.intended_execution_date,
                                     "actual_execution_date": date,
                                     "signal_price": order.signal_price,
-                                    "execution_price": bar.open, "quantity": order.quantity,
+                                    "execution_price": execution_price, "quantity": order.quantity,
+                                    "fee": fees.total,
                                     "planned_stop": order.planned_stop,
                                     "gap_loss": order.gap_loss})
             for ticker, position in list(self.account.positions.items()):
@@ -150,7 +155,9 @@ class BacktestEngine:
                     order.execution_block_reason = block
                     continue
                 filled_quantity = position.quantity
-                self.account.sell(ticker, filled_quantity, execution_price)
+                execution_price = self.fee_model.execution_price(execution_price, "sell")
+                fees = self.fee_model.fee(date, "sell", filled_quantity, execution_price)
+                self.account.sell(ticker, filled_quantity, execution_price, fees.total)
                 order.status = "filled"
                 order.actual_execution_date = date
                 order.execution_price = execution_price
@@ -160,6 +167,7 @@ class BacktestEngine:
                                     "signal_price": planned_stop,
                                     "execution_price": execution_price,
                                     "quantity": filled_quantity,
+                                    "fee": fees.total,
                                     "planned_stop": planned_stop, "gap_loss": order.gap_loss})
             prices = {ticker: bar.close for ticker, bar in day.items()}
             snapshot = self.account.mark(prices)
