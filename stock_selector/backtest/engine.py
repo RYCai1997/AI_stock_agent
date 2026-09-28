@@ -8,6 +8,7 @@ from math import floor, isfinite
 from .account import Account
 from .execution import LimitContext, fill_block_reason, stop_execution_price
 from .fees import FeeModel, ZERO_COST_MODEL
+from .corporate_actions import CorporateAction, apply_corporate_action
 from selector.strategy import OFFICIAL_STRATEGY
 
 
@@ -60,11 +61,13 @@ class BacktestEngine:
     trades: list[dict] = field(default_factory=list)
     daily_nav: list[dict] = field(default_factory=list)
     positions: list[dict] = field(default_factory=list)
+    corporate_action_events: list[dict] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.account = Account(self.initial_cash)
 
-    def run(self, bars: list[DailyBar], signals: list[Signal]) -> "BacktestEngine":
+    def run(self, bars: list[DailyBar], signals: list[Signal],
+            actions: list[CorporateAction] | None = None) -> "BacktestEngine":
         by_date: dict[str, dict[str, DailyBar]] = {}
         for bar in bars:
             if any(not isfinite(x) or x <= 0 for x in (bar.open, bar.high, bar.low, bar.close)):
@@ -76,6 +79,11 @@ class BacktestEngine:
         if not dates:
             raise ValueError("no trading dates")
         signal_map: dict[str, list[Signal]] = {}
+        action_map: dict[str, list[CorporateAction]] = {}
+        for action in actions or []:
+            if action.date not in by_date:
+                raise ValueError("corporate action date has no trading session")
+            action_map.setdefault(action.date, []).append(action)
         for signal in signals:
             if signal.signal_date not in by_date:
                 raise ValueError("signal_date has no trading session")
@@ -85,6 +93,18 @@ class BacktestEngine:
         for index, date in enumerate(dates):
             day = by_date[date]
             previous = by_date[dates[index - 1]] if index else {}
+            for action in action_map.get(date, []):
+                event = apply_corporate_action(self.account, action)
+                self.corporate_action_events.append(event)
+                if event["status"] == "applied" and action.kind in {"bonus", "conversion", "split", "rights"}:
+                    for order in self.orders:
+                        if order.status != "pending" or order.ticker != action.ticker:
+                            continue
+                        if order.side == "sell":
+                            order.quantity = self.account.positions[action.ticker].quantity
+                        else:
+                            order.status = "cancelled"
+                            order.execution_block_reason = "corporate_action_reprice"
             for order in self.orders:
                 if order.status != "pending" or order.intended_execution_date > date:
                     continue
