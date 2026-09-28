@@ -68,6 +68,8 @@ python stock_selector\run_backtest.py --bars bars.csv --actions actions.csv `
 
 沪深300历史成分仍需与中证指数公告逐日期核对；审计方法和当前证据缺口见 [DATA_UNIVERSE_AUDIT.md](DATA_UNIVERSE_AUDIT.md)。
 
+正式“当前账户”运行完成后，会在忽略追踪的 `stock_selector/user_data/shadow/` 保存不可变的影子信号记录，包含策略和程序版本、Git 版本、输入哈希、候选、计划与账户快照。观察到次日开盘后，可用 `python stock_selector/reconcile_shadow.py --record <记录.json> --observations <行情.csv> --source <来源>` 追加独立核对文件；它只计算可成交性与价格差，不连接券商或下单。该记录主要检验数据延迟、信号复现与成交假设，短期 paper trading 不能证明 alpha。
+
 公司行动 CSV 至少有 `date,ticker,kind` 表头；空表仅表示未提供事件，不证明历史期间没有事件。输入 manifest 必须写明 `bars_price_basis: "unadjusted"`，以及 `corporate_actions_status: "audited"` 或 `"unverified"`。输出的 `data_quality_report.md` 会披露未核对的事件和覆盖状态。
 
 ## 命令行与结果

@@ -18,6 +18,7 @@ from selector.account_guidance import build_account_guidance
 from selector.strategy import OFFICIAL_STRATEGY
 from selector.run_feedback import emit_progress, format_run_summary
 from selector.research_manifest import build_research_manifest
+from selector.shadow import write_shadow_record
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -129,12 +130,20 @@ def main() -> None:
     emit_progress(5, 2, 5, "正在保存账户指导")
     guidance.to_csv(output / "account_guidance.csv", index=False)
     emit_progress(5, 3, 5, "正在保存运行元数据")
+    manifest = build_research_manifest(as_of=args.as_of, provider=provider)
+    (output / "research_manifest.json").write_text(
+        json.dumps(manifest,
+                   ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    if args.mode == "current":
+        shadow_path = write_shadow_record(
+            as_of=args.as_of, output=output, metadata=manifest,
+            plan=plan, actionable=scored[scored["actionable_candidate"]],
+            account=account, shadow_dir=BASE_DIR / "user_data" / "shadow",
+        )
+        metadata["shadow_record"] = str(shadow_path)
     (output / "official_run_metadata.json").write_text(
         json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
-    (output / "research_manifest.json").write_text(
-        json.dumps(build_research_manifest(as_of=args.as_of, provider=provider),
-                   ensure_ascii=False, indent=2), encoding="utf-8"
     )
     emit_progress(5, 4, 5, "正在保存中文结果汇报")
     summary = format_run_summary(metadata)
