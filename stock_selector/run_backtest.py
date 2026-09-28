@@ -13,7 +13,7 @@ from backtest.corporate_actions import CorporateAction
 from backtest.engine import BacktestEngine, DailyBar
 from backtest.fees import FeeModel, FeeSchedule
 from backtest.official import OfficialSnapshot
-from backtest.report import write_report
+from backtest.report import write_report, finalize_research_summary
 from backtest.variants import VARIANTS, VariantSignalProvider, run_index_variant
 from backtest.robustness import leave_one_window_out
 from backtest.parameter_stability import parameter_surface
@@ -135,6 +135,7 @@ def main() -> None:
     if args.all_variants:
         output.mkdir(parents=True, exist_ok=True)
         pd.DataFrame(comparison).to_csv(output / "variant_comparison.csv", index=False)
+    finalize_research_summary(output, comparison, provenance)
     serializable = [{key: value if not isinstance(value, float) or math.isfinite(value) else None
                      for key, value in row.items()} for row in comparison]
     print(json.dumps({"output": str(output.resolve()), "variants": serializable},

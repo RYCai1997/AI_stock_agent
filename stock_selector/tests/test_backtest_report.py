@@ -83,3 +83,6 @@ class BacktestReportTests(unittest.TestCase):
             surface = pd.read_csv(root / "report" / "parameter_stability.csv")
             self.assertEqual(len(surface), 13)
             self.assertTrue((root / "report" / "monte_carlo_selection.csv").exists())
+            summary = (root / "report" / "summary.md").read_text(encoding="utf-8")
+            self.assertIn("17. **UNRESOLVED**", summary)
+            self.assertIn("retrospective", summary)
