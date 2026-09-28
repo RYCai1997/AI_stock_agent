@@ -13,11 +13,13 @@ from selector.research_manifest import build_research_manifest
 from .corporate_actions import data_quality_report
 from .engine import BacktestEngine
 from .metrics import performance
+from .benchmarks import benchmark_comparison
 
 
 def write_report(engine: BacktestEngine, output: Path, *, start: str, end: str,
                  input_provenance: dict, snapshot_count: int,
-                 variant_code: str = "H") -> dict:
+                 variant_code: str = "H",
+                 benchmark_prices: pd.DataFrame | None = None) -> dict:
     output.mkdir(parents=True, exist_ok=True)
     measures = performance(engine.daily_nav, engine.trades)
     pd.DataFrame(engine.daily_nav).to_csv(output / "daily_nav.csv", index=False)
@@ -25,6 +27,11 @@ def write_report(engine: BacktestEngine, output: Path, *, start: str, end: str,
     pd.DataFrame([asdict(order) for order in engine.orders]).to_csv(output / "orders.csv", index=False)
     pd.DataFrame(engine.positions).to_csv(output / "positions.csv", index=False)
     pd.DataFrame([measures]).to_csv(output / "performance.csv", index=False)
+    benchmark_metrics = None
+    if benchmark_prices is not None:
+        comparison, benchmark_metrics = benchmark_comparison(engine.daily_nav, benchmark_prices)
+        comparison.to_csv(output / "benchmark_comparison.csv", index=False)
+        pd.DataFrame([benchmark_metrics]).to_csv(output / "benchmark_metrics.csv", index=False)
     quality = data_quality_report(engine.corporate_action_events)
     if input_provenance.get("corporate_actions_status") != "audited":
         quality += "\nInput corporate-action coverage is unverified; historical NAV confidence is degraded.\n"
@@ -34,7 +41,8 @@ def write_report(engine: BacktestEngine, output: Path, *, start: str, end: str,
         provider={"membership_snapshot": None, "requested_members": None,
                   "built_rows": None, "errors": {}},
         benchmark={"name": "CSI 300", "code": "sh.000300",
-                   "comparison": "pending benchmark price input"},
+                   "comparison": "full and prior-exposure matched close-to-close"
+                   if benchmark_metrics is not None else "pending benchmark price input"},
         execution_assumptions={
             "price_basis": "unadjusted", "timing": "next_tradable_open",
             "limit_rule": "opening at limit blocks adverse-side order",
@@ -57,6 +65,12 @@ def write_report(engine: BacktestEngine, output: Path, *, start: str, end: str,
                f"Maximum drawdown: {measures['maximum_drawdown']:.2%}.",
                f"Transaction costs: {measures['total_transaction_costs']:.2f}.",
                f"Manual corporate-action audit events: {sum(e.get('manual_audit_required', False) for e in engine.corporate_action_events)}.",
-               "", "No relative-performance or alpha claim is made until benchmark and data audits are complete."]
+               ""]
+    if benchmark_metrics is not None:
+        summary += [f"Full CSI300 cumulative return: {benchmark_metrics['full_csi300_cumulative_return']:.2%}.",
+                    f"Exposure-matched CSI300 cumulative return: {benchmark_metrics['matched_csi300_cumulative_return']:.2%}.",
+                    "Exposure matching uses prior-day strategy exposure and assumes zero cash yield.",
+                    "The index close series excludes dividends unless the supplied benchmark source includes them."]
+    summary.append("No alpha claim is made until benchmark and data audits are complete.")
     (output / "summary.md").write_text("\n".join(summary) + "\n", encoding="utf-8")
     return measures

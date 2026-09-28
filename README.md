@@ -54,6 +54,8 @@ python stock_selector\run_backtest.py --bars bars.csv --actions actions.csv `
 
 加 `--all-variants --benchmark-bars csi300.csv` 可固定运行 A–H 并输出 `variant_comparison.csv`。A/B 使用指数开收盘和前一日 EMA200 构造理论敞口，不是可直接交易的沪深300订单，也不含券商费用；C–H 使用相同股票行情、账户、费率和成交引擎。各版本都是拆解研究，不能据此自动修改冻结的 H/V1 参数。
 
+提供同日期的基准 CSV 后，报告还会输出满仓沪深300与“前一日策略仓位 × 当日沪深300收益”的动态敞口匹配基准、超额收益、跟踪误差、信息比率和 Beta。现金收益按0，指数价格是否含分红取决于输入来源。
+
 公司行动 CSV 至少有 `date,ticker,kind` 表头；空表仅表示未提供事件，不证明历史期间没有事件。输入 manifest 必须写明 `bars_price_basis: "unadjusted"`，以及 `corporate_actions_status: "audited"` 或 `"unverified"`。输出的 `data_quality_report.md` 会披露未核对的事件和覆盖状态。
 
 ## 命令行与结果
