@@ -36,7 +36,9 @@ DEFAULT_CACHE = APP_DIR / "outputs" / "official_provider_cache"
 HOLDINGS_DIR = APP_DIR / "user_data" / "holdings"
 ACCOUNT_PATH = APP_DIR / "user_data" / "account.json"
 JOURNAL_PATH = APP_DIR / "user_data" / "trades.sqlite3"
-GUI_VERSION = "1.2.1"
+from selector.version import APPLICATION_VERSION
+
+GUI_VERSION = APPLICATION_VERSION
 
 
 def _percent(value: object, digits: int = 1) -> str:

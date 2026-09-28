@@ -17,6 +17,7 @@ from selector.providers.a_baostock import fetch_holding_quotes
 from selector.account_guidance import build_account_guidance
 from selector.strategy import OFFICIAL_STRATEGY
 from selector.run_feedback import emit_progress, format_run_summary
+from selector.research_manifest import build_research_manifest
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -130,6 +131,10 @@ def main() -> None:
     emit_progress(5, 3, 5, "正在保存运行元数据")
     (output / "official_run_metadata.json").write_text(
         json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    (output / "research_manifest.json").write_text(
+        json.dumps(build_research_manifest(as_of=args.as_of, provider=provider),
+                   ensure_ascii=False, indent=2), encoding="utf-8"
     )
     emit_progress(5, 4, 5, "正在保存中文结果汇报")
     summary = format_run_summary(metadata)

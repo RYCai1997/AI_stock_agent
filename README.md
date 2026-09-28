@@ -66,6 +66,7 @@ python stock_selector\run_official_strategy.py --as-of 2026-09-09 `
 - `holding_review.csv`：已有持仓的止损线、资格和月度退出复核；
 - `account_guidance.csv`：结合账户限制得出的建议股数及原因；
 - `official_run_metadata.json`：固定策略版本、参数和数据日期。
+- `research_manifest.json`：策略、应用、Git版本、数据源、因子和执行假设；若存在未提交代码，明确标记工作树状态。
 - `run_summary.txt`：与页面一致的中文筛选汇报。
 
 ## 使用边界与本地数据
