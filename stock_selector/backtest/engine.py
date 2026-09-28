@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from math import floor, isfinite
 
 from .account import Account
+from .execution import LimitContext, fill_block_reason, stop_execution_price
+from selector.strategy import OFFICIAL_STRATEGY
 
 
 @dataclass(frozen=True)
@@ -17,6 +19,9 @@ class DailyBar:
     low: float
     close: float
     tradable: bool = True
+    limit_up: float | None = None
+    limit_down: float | None = None
+    is_st: bool = False
 
 
 @dataclass(frozen=True)
@@ -41,6 +46,8 @@ class Order:
     actual_execution_date: str | None = None
     execution_price: float | None = None
     execution_block_reason: str | None = None
+    planned_stop: float | None = None
+    gap_loss: float = 0.0
 
 
 @dataclass
@@ -75,12 +82,25 @@ class BacktestEngine:
             signal_map.setdefault(signal.signal_date, []).append(signal)
         for index, date in enumerate(dates):
             day = by_date[date]
+            previous = by_date[dates[index - 1]] if index else {}
             for order in self.orders:
                 if order.status != "pending" or order.intended_execution_date > date:
                     continue
                 bar = day.get(order.ticker)
-                if bar is None or not bar.tradable:
+                if bar is None:
                     order.execution_block_reason = "no_tradable_bar"
+                    continue
+                block = fill_block_reason(
+                    order.side, date=date, ticker=order.ticker, open_price=bar.open,
+                    tradable=bar.tradable,
+                    context=LimitContext(
+                        previous_close=previous[order.ticker].close if order.ticker in previous else None,
+                        explicit_limit_up=bar.limit_up, explicit_limit_down=bar.limit_down,
+                        is_st=bar.is_st,
+                    ),
+                )
+                if block:
+                    order.execution_block_reason = block
                     continue
                 if order.side == "buy":
                     if order.quantity * bar.open > self.account.cash + 1e-8:
@@ -99,7 +119,48 @@ class BacktestEngine:
                                     "intended_execution_date": order.intended_execution_date,
                                     "actual_execution_date": date,
                                     "signal_price": order.signal_price,
-                                    "execution_price": bar.open, "quantity": order.quantity})
+                                    "execution_price": bar.open, "quantity": order.quantity,
+                                    "planned_stop": order.planned_stop,
+                                    "gap_loss": order.gap_loss})
+            for ticker, position in list(self.account.positions.items()):
+                if any(o.status == "pending" and o.side == "sell" and o.ticker == ticker for o in self.orders):
+                    continue
+                bar = day.get(ticker)
+                if bar is None:
+                    continue
+                planned_stop = position.average_cost * (1 - OFFICIAL_STRATEGY.stop_loss_fraction)
+                trigger = stop_execution_price(bar.open, bar.low, planned_stop)
+                if trigger is None:
+                    continue
+                execution_price, gap_loss = trigger
+                order = Order(date, date, ticker, "sell", position.quantity,
+                              planned_stop, "stop loss", planned_stop=planned_stop,
+                              gap_loss=gap_loss * position.quantity)
+                self.orders.append(order)
+                block = fill_block_reason(
+                    "sell", date=date, ticker=ticker, open_price=bar.open,
+                    tradable=bar.tradable,
+                    context=LimitContext(
+                        previous_close=previous[ticker].close if ticker in previous else None,
+                        explicit_limit_up=bar.limit_up, explicit_limit_down=bar.limit_down,
+                        is_st=bar.is_st,
+                    ),
+                )
+                if block:
+                    order.execution_block_reason = block
+                    continue
+                filled_quantity = position.quantity
+                self.account.sell(ticker, filled_quantity, execution_price)
+                order.status = "filled"
+                order.actual_execution_date = date
+                order.execution_price = execution_price
+                self.trades.append({"ticker": ticker, "side": "sell",
+                                    "signal_date": date, "intended_execution_date": date,
+                                    "actual_execution_date": date,
+                                    "signal_price": planned_stop,
+                                    "execution_price": execution_price,
+                                    "quantity": filled_quantity,
+                                    "planned_stop": planned_stop, "gap_loss": order.gap_loss})
             prices = {ticker: bar.close for ticker, bar in day.items()}
             snapshot = self.account.mark(prices)
             self.daily_nav.append({"date": date, **snapshot,
