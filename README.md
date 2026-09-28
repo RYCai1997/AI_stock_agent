@@ -116,6 +116,8 @@ $env:PYTHONPATH = (Resolve-Path stock_selector)
 python -m unittest discover -s stock_selector/tests
 ```
 
+GitHub Actions 的 Windows 流程运行同一套确定性 `unittest`；测试使用本地 fixture/mock，不请求实时 Baostock 或当日市场数据。
+
 ## 目录
 
 - `stock_selector/`：唯一正式运行系统和测试；
