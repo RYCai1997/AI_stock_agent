@@ -81,3 +81,11 @@ class BacktestCoreTests(unittest.TestCase):
         self.assertEqual(fill_block_reason("buy", date="2025-01-03", ticker="sh.688001",
                                            open_price=12, tradable=True, context=context),
                          "limit_up_buy_block")
+
+    def test_overheat_delay_waits_five_full_sessions(self):
+        dates = ["2025-01-02", "2025-01-03", "2025-01-06", "2025-01-07",
+                 "2025-01-08", "2025-01-09", "2025-01-10"]
+        bars = [DailyBar(date, "A", 10, 10, 10, 10) for date in dates]
+        result = BacktestEngine(100000).run(
+            bars, [Signal(dates[0], "A", "buy", .06, delay_sessions=5)])
+        self.assertEqual(result.trades[0]["actual_execution_date"], dates[6])

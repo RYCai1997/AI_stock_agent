@@ -42,6 +42,18 @@ GUI / CLI → Official strategy → Point-in-time provider → Scoring
           → Timing → Portfolio plan → Holding review / account guidance
 ```
 
+离线历史研究可把正式策略生成的月度节点快照交给 `stock_selector/run_backtest.py`，经同一筛选和持仓复核代码形成信号，再由连续账户引擎模拟次日开盘成交、停牌、涨跌停、止损、费用和每日净值。该研究入口不修改正式筛选器，也不连接券商。
+
+运行前需备齐逐日**未复权** OHLC CSV、每月正式运行的 `raw_metrics.csv` 与 `official_run_metadata.json`、公司行动 CSV、日期化费率 JSON，以及说明价格口径和公司行动覆盖状态的输入 manifest。缺少这些历史数据时不能得出连续回测收益。命令格式：
+
+```powershell
+python stock_selector\run_backtest.py --bars bars.csv --actions actions.csv `
+  --snapshots-dir monthly_snapshots --fee-config fees.json `
+  --input-manifest input_manifest.json --output reports\continuous_backtest
+```
+
+公司行动 CSV 至少有 `date,ticker,kind` 表头；空表仅表示未提供事件，不证明历史期间没有事件。输入 manifest 必须写明 `bars_price_basis: "unadjusted"`，以及 `corporate_actions_status: "audited"` 或 `"unverified"`。输出的 `data_quality_report.md` 会披露未核对的事件和覆盖状态。
+
 ## 命令行与结果
 
 从项目根目录也可以运行：

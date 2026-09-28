@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from math import floor, isfinite
+from typing import Callable
 
 from .account import Account
 from .execution import LimitContext, fill_block_reason, stop_execution_price
@@ -33,6 +34,7 @@ class Signal:
     side: str
     target_fraction: float = 0.0
     reason: str = "monthly selection"
+    delay_sessions: int = 0
 
 
 @dataclass
@@ -67,7 +69,9 @@ class BacktestEngine:
         self.account = Account(self.initial_cash)
 
     def run(self, bars: list[DailyBar], signals: list[Signal],
-            actions: list[CorporateAction] | None = None) -> "BacktestEngine":
+            actions: list[CorporateAction] | None = None,
+            signal_provider: Callable[[str, Account, dict[str, DailyBar]], list[Signal]] | None = None,
+            ) -> "BacktestEngine":
         by_date: dict[str, dict[str, DailyBar]] = {}
         for bar in bars:
             if any(not isfinite(x) or x <= 0 for x in (bar.open, bar.high, bar.low, bar.close)):
@@ -87,7 +91,7 @@ class BacktestEngine:
         for signal in signals:
             if signal.signal_date not in by_date:
                 raise ValueError("signal_date has no trading session")
-            if signal.side not in {"buy", "sell"} or not 0 <= signal.target_fraction <= 1:
+            if signal.side not in {"buy", "sell"} or not 0 <= signal.target_fraction <= 1 or signal.delay_sessions < 0:
                 raise ValueError("invalid signal")
             signal_map.setdefault(signal.signal_date, []).append(signal)
         for index, date in enumerate(dates):
@@ -131,7 +135,7 @@ class BacktestEngine:
                         order.status = "cancelled"
                         order.execution_block_reason = "insufficient_cash"
                         continue
-                    self.account.buy(order.ticker, order.quantity, execution_price, fees.total)
+                    self.account.buy(order.ticker, order.quantity, execution_price, fees.total, date)
                 else:
                     self.account.sell(order.ticker, order.quantity, execution_price, fees.total)
                 order.status = "filled"
@@ -201,10 +205,17 @@ class BacktestEngine:
                                        "market_value": position.quantity * prices[ticker]})
             if index + 1 == len(dates):
                 continue
-            next_date = dates[index + 1]
-            for signal in signal_map.get(date, []):
+            generated = signal_provider(date, self.account, day) if signal_provider else []
+            for signal in signal_map.get(date, []) + generated:
+                if any(o.status == "pending" and o.ticker == signal.ticker
+                       and o.side == signal.side for o in self.orders):
+                    continue
                 if signal.ticker not in day:
                     raise ValueError("signal has no point-in-time price")
+                execution_index = index + 1 + signal.delay_sessions
+                if execution_index >= len(dates):
+                    raise ValueError("not enough trading sessions for delayed signal")
+                next_date = dates[execution_index]
                 signal_price = day[signal.ticker].close
                 if signal.side == "buy":
                     budget = snapshot["total_equity"] * signal.target_fraction
@@ -218,4 +229,5 @@ class BacktestEngine:
                     quantity = position.quantity
                 self.orders.append(Order(date, next_date, signal.ticker, signal.side,
                                          quantity, signal_price, signal.reason))
+            self.daily_nav[-1]["pending_orders"] = sum(o.status == "pending" for o in self.orders)
         return self

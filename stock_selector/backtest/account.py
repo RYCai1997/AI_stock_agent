@@ -10,6 +10,7 @@ from math import isfinite
 class Position:
     quantity: int = 0
     average_cost: float = 0.0
+    entry_date: str | None = None
 
 
 @dataclass
@@ -26,7 +27,8 @@ class Account:
             raise ValueError("initial_cash must be positive and finite")
         self.cash = float(self.initial_cash)
 
-    def buy(self, ticker: str, quantity: int, price: float, fee: float = 0.0) -> None:
+    def buy(self, ticker: str, quantity: int, price: float, fee: float = 0.0,
+            date: str | None = None) -> None:
         self._validate_trade(quantity, price, fee)
         cost = quantity * price + fee
         if cost > self.cash + 1e-8:
@@ -35,6 +37,8 @@ class Account:
         old_basis = position.quantity * position.average_cost
         position.quantity += quantity
         position.average_cost = (old_basis + cost) / position.quantity
+        if position.entry_date is None:
+            position.entry_date = date
         self.cash -= cost
         self.fees += fee
 
