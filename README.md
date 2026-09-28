@@ -58,6 +58,8 @@ python stock_selector\run_backtest.py --bars bars.csv --actions actions.csv `
 
 完整 H/V1 回放会逐个移除历史开仓窗口的新买入信号，并重跑账户路径，生成 `window_influence.csv`。这是影响诊断，删除强势窗口后的数字不是可实现的真实历史收益。
 
+`winner_concentration.csv` 报告已平仓盈利交易和窗口的集中度；分母为全部盈利交易利润，未平仓浮盈和分红单列在账户记录中。
+
 公司行动 CSV 至少有 `date,ticker,kind` 表头；空表仅表示未提供事件，不证明历史期间没有事件。输入 manifest 必须写明 `bars_price_basis: "unadjusted"`，以及 `corporate_actions_status: "audited"` 或 `"unverified"`。输出的 `data_quality_report.md` 会披露未核对的事件和覆盖状态。
 
 ## 命令行与结果

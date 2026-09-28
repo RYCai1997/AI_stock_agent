@@ -14,6 +14,7 @@ from .corporate_actions import data_quality_report
 from .engine import BacktestEngine
 from .metrics import performance
 from .benchmarks import benchmark_comparison
+from .concentration import winner_concentration
 
 
 def write_report(engine: BacktestEngine, output: Path, *, start: str, end: str,
@@ -27,6 +28,7 @@ def write_report(engine: BacktestEngine, output: Path, *, start: str, end: str,
     pd.DataFrame([asdict(order) for order in engine.orders]).to_csv(output / "orders.csv", index=False)
     pd.DataFrame(engine.positions).to_csv(output / "positions.csv", index=False)
     pd.DataFrame([measures]).to_csv(output / "performance.csv", index=False)
+    winner_concentration(engine.trades).to_csv(output / "winner_concentration.csv", index=False)
     benchmark_metrics = None
     if benchmark_prices is not None:
         comparison, benchmark_metrics = benchmark_comparison(engine.daily_nav, benchmark_prices)
