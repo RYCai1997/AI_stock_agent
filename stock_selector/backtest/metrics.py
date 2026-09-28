@@ -40,7 +40,8 @@ def performance(daily_nav: list[dict], trades: list[dict]) -> dict:
             buy = open_lots.pop(ticker)
             buy_cost = buy["quantity"] * buy["execution_price"] + buy.get("fee", 0)
             proceeds = trade["quantity"] * trade["execution_price"] - trade.get("fee", 0)
-            closed.append({"pnl": proceeds - buy_cost,
+            closed.append({"pnl": trade.get("realized_pnl")
+                           if trade.get("realized_pnl") is not None else proceeds - buy_cost,
                            "holding_days": (date.fromisoformat(trade["actual_execution_date"]) -
                                             date.fromisoformat(buy["actual_execution_date"])).days})
     winners = [item["pnl"] for item in closed if item["pnl"] > 0]

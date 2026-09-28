@@ -131,6 +131,7 @@ class BacktestEngine:
                     continue
                 execution_price = self.fee_model.execution_price(bar.open, order.side)
                 fees = self.fee_model.fee(date, order.side, order.quantity, execution_price)
+                prior_realized = self.account.realized_pnl
                 if order.side == "buy":
                     if order.quantity * execution_price + fees.total > self.account.cash + 1e-8:
                         order.status = "cancelled"
@@ -150,6 +151,8 @@ class BacktestEngine:
                                     "signal_price": order.signal_price,
                                     "execution_price": execution_price, "quantity": order.quantity,
                                     "fee": fees.total,
+                                    "realized_pnl": self.account.realized_pnl - prior_realized
+                                    if order.side == "sell" else None,
                                     "planned_stop": order.planned_stop,
                                     "gap_loss": order.gap_loss})
             for ticker, position in list(self.account.positions.items()) if self.stop_enabled else []:
@@ -182,6 +185,7 @@ class BacktestEngine:
                 filled_quantity = position.quantity
                 execution_price = self.fee_model.execution_price(execution_price, "sell")
                 fees = self.fee_model.fee(date, "sell", filled_quantity, execution_price)
+                prior_realized = self.account.realized_pnl
                 self.account.sell(ticker, filled_quantity, execution_price, fees.total)
                 order.status = "filled"
                 order.actual_execution_date = date
@@ -193,6 +197,7 @@ class BacktestEngine:
                                     "execution_price": execution_price,
                                     "quantity": filled_quantity,
                                     "fee": fees.total,
+                                    "realized_pnl": self.account.realized_pnl - prior_realized,
                                     "planned_stop": planned_stop, "gap_loss": order.gap_loss})
             prices = {ticker: bar.close for ticker, bar in day.items()}
             snapshot = self.account.mark(prices)
