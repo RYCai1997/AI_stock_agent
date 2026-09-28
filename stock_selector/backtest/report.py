@@ -15,12 +15,17 @@ from .engine import BacktestEngine
 from .metrics import performance
 from .benchmarks import benchmark_comparison
 from .concentration import winner_concentration
+from .diagnostics import MAE_MFE_COLUMNS, mae_mfe
+from .corporate_actions import CorporateAction
+from .engine import DailyBar
 
 
 def write_report(engine: BacktestEngine, output: Path, *, start: str, end: str,
                  input_provenance: dict, snapshot_count: int,
                  variant_code: str = "H",
-                 benchmark_prices: pd.DataFrame | None = None) -> dict:
+                 benchmark_prices: pd.DataFrame | None = None,
+                 bars: list[DailyBar] | None = None,
+                 actions: list[CorporateAction] | None = None) -> dict:
     output.mkdir(parents=True, exist_ok=True)
     measures = performance(engine.daily_nav, engine.trades)
     pd.DataFrame(engine.daily_nav).to_csv(output / "daily_nav.csv", index=False)
@@ -29,6 +34,9 @@ def write_report(engine: BacktestEngine, output: Path, *, start: str, end: str,
     pd.DataFrame(engine.positions).to_csv(output / "positions.csv", index=False)
     pd.DataFrame([measures]).to_csv(output / "performance.csv", index=False)
     winner_concentration(engine.trades).to_csv(output / "winner_concentration.csv", index=False)
+    diagnostics = (mae_mfe(engine.trades, bars, actions) if bars
+                   else pd.DataFrame(columns=MAE_MFE_COLUMNS))
+    diagnostics.to_csv(output / "mae_mfe.csv", index=False)
     benchmark_metrics = None
     if benchmark_prices is not None:
         comparison, benchmark_metrics = benchmark_comparison(engine.daily_nav, benchmark_prices)

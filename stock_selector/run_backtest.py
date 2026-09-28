@@ -96,7 +96,8 @@ def main() -> None:
                                 start=min(day["date"] for day in engine.daily_nav),
                                 end=max(day["date"] for day in engine.daily_nav),
                                 input_provenance=provenance, snapshot_count=len(snapshots),
-                                variant_code=code, benchmark_prices=benchmark_frame)
+                                variant_code=code, benchmark_prices=benchmark_frame,
+                                bars=bars if spec.kind == "stock" else [], actions=actions)
         comparison.append({"variant": code, "label": spec.label,
                            "kind": spec.kind, **measures})
         if code == "H":

@@ -150,6 +150,7 @@ class BacktestEngine:
                                     "actual_execution_date": date,
                                     "signal_price": order.signal_price,
                                     "execution_price": execution_price, "quantity": order.quantity,
+                                    "reason": order.reason,
                                     "fee": fees.total,
                                     "realized_pnl": self.account.realized_pnl - prior_realized
                                     if order.side == "sell" else None,
@@ -196,6 +197,7 @@ class BacktestEngine:
                                     "signal_price": planned_stop,
                                     "execution_price": execution_price,
                                     "quantity": filled_quantity,
+                                    "reason": "stop loss",
                                     "fee": fees.total,
                                     "realized_pnl": self.account.realized_pnl - prior_realized,
                                     "planned_stop": planned_stop, "gap_loss": order.gap_loss})

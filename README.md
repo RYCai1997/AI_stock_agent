@@ -60,6 +60,8 @@ python stock_selector\run_backtest.py --bars bars.csv --actions actions.csv `
 
 `winner_concentration.csv` 报告已平仓盈利交易和窗口的集中度；分母为全部盈利交易利润，未平仓浮盈和分红单列在账户记录中。
 
+`mae_mfe.csv` 记录已平仓交易持有期间的最不利与最有利盘中价格，以及止损后最多20个交易日的走势。观察期不足会标为 censored；涉及公司行动会标为需要人工审计。这些价格路径比较不等同于可实际持有的反事实组合收益。
+
 公司行动 CSV 至少有 `date,ticker,kind` 表头；空表仅表示未提供事件，不证明历史期间没有事件。输入 manifest 必须写明 `bars_price_basis: "unadjusted"`，以及 `corporate_actions_status: "audited"` 或 `"unverified"`。输出的 `data_quality_report.md` 会披露未核对的事件和覆盖状态。
 
 ## 命令行与结果
