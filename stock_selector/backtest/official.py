@@ -22,6 +22,17 @@ class OfficialSnapshot:
     provider: dict
 
 
+def validate_snapshot_provider_dates(provider: dict, signal_date: str) -> None:
+    dates = {
+        "benchmark": provider.get("benchmark", {}).get("price_as_of"),
+        "membership": provider.get("membership_snapshot"),
+        "membership update": provider.get("membership_update_max"),
+    }
+    for label, as_of in dates.items():
+        if as_of and pd.Timestamp(as_of) > pd.Timestamp(signal_date):
+            raise ValueError(f"future {label} data blocked for {signal_date}: {as_of}")
+
+
 @dataclass
 class OfficialSignalProvider:
     snapshots: dict[str, OfficialSnapshot]
@@ -36,6 +47,7 @@ class OfficialSignalProvider:
         if snapshot is None:
             return []
         metadata = snapshot.provider
+        validate_snapshot_provider_dates(metadata, date)
         if metadata.get("errors") or metadata.get("built_rows") != len(snapshot.metrics):
             raise ValueError("incomplete point-in-time snapshot")
         market_trend = metadata["market_trend"]

@@ -35,3 +35,15 @@ class OfficialBacktestTests(unittest.TestCase):
             "market_trend": "up", "built_rows": 0, "errors": {"x": "missing"}})}, Path("unused"))
         with self.assertRaisesRegex(ValueError, "incomplete"):
             adapter(date, Account(100000), {})
+
+    def test_future_benchmark_metadata_is_blocked(self):
+        metrics = sample_frame(10)
+        date = "2025-07-15"
+        provider = {"market_trend": "up", "built_rows": len(metrics), "errors": {},
+                    "benchmark": {"price_as_of": "2025-07-16", "return_20d": 0}}
+        day = {ticker: DailyBar(date, ticker, 10, 10, 10, 10)
+               for ticker in metrics.ticker}
+        with tempfile.TemporaryDirectory() as folder:
+            adapter = OfficialSignalProvider({date: OfficialSnapshot(metrics, provider)}, Path(folder))
+            with self.assertRaisesRegex(ValueError, "future benchmark"):
+                adapter(date, Account(100000), day)

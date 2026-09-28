@@ -15,7 +15,7 @@ from selector.strategy import OFFICIAL_STRATEGY
 
 from .account import Account
 from .engine import DailyBar, Signal
-from .official import OfficialSignalProvider, OfficialSnapshot
+from .official import OfficialSignalProvider, OfficialSnapshot, validate_snapshot_provider_dates
 
 
 @dataclass(frozen=True)
@@ -92,6 +92,7 @@ class VariantSignalProvider:
         snapshot = self.snapshots.get(date)
         if snapshot is None:
             return []
+        validate_snapshot_provider_dates(snapshot.provider, date)
         if snapshot.provider.get("errors") or snapshot.provider.get("built_rows") != len(snapshot.metrics):
             raise ValueError("incomplete point-in-time snapshot")
         self.audit_dir.mkdir(parents=True, exist_ok=True)
