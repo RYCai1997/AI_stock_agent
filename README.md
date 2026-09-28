@@ -35,6 +35,13 @@ Launch_Stock_System.bat
 
 GUI与命令行调用同一个正式策略入口；GUI只是展示与操作层，不改变任何选股、仓位或退出参数。
 
+正式运行链：
+
+```text
+GUI / CLI → Official strategy → Point-in-time provider → Scoring
+          → Timing → Portfolio plan → Holding review / account guidance
+```
+
 ## 命令行与结果
 
 从项目根目录也可以运行：
@@ -80,10 +87,10 @@ python -m unittest discover -s stock_selector/tests
 
 ## 目录
 
-- `stock_selector/`：唯一正式运行系统、测试和组合宽度验证报告；
-- `archive/legacy/`：旧LLM、币圈和纯价格策略，只用于历史追溯；
-- `archive/research/`：A股实验脚本、美股适配和旧跨市场工具；
-- `archive/planning/`：已经完成的历史重构计划；
+- `stock_selector/`：唯一正式运行系统和测试；
+- `.archive/legacy/`：旧LLM、币圈和纯价格策略，只用于历史追溯；
+- `.archive/research/`：A股实验脚本、组合宽度比较、美股适配和旧跨市场工具；
+- `.archive/planning/`：已经完成的历史重构计划；
 - `_ref_daily_stock_analysis/`：本地外部参考，不纳入本仓库追踪。
 
 旧策略不会被正式入口导入或调用。Git历史保留完整回退能力。

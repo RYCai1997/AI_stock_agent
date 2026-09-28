@@ -22,7 +22,7 @@ python stock_selector\run_official_strategy.py --as-of YYYY-MM-DD
 
 程序输出完整候选池、Q/V/M合格池、趋势确认池、Top 5人工审批计划、持仓复核和审计元数据。每只计划仓位6%，单窗口最多30%。
 
-完整策略见根目录`OFFICIAL_STRATEGY.md`，第一版说明见`RELEASE_NOTES_v1.0.0.md`，组合宽度证据见`PORTFOLIO_BREADTH_VALIDATION.md`。
+完整策略见根目录`OFFICIAL_STRATEGY.md`，第一版说明见`RELEASE_NOTES_v1.0.0.md`，历史组合宽度证据见`.archive/research/stock_selector/PORTFOLIO_BREADTH_VALIDATION.md`。
 
 ## 正式代码
 
@@ -37,4 +37,4 @@ python stock_selector\run_official_strategy.py --as-of YYYY-MM-DD
 - `selector/holdings_store.py`：本地持仓快照、校验和复核状态延续；
 - `tests/test_selector.py`：正式版测试。
 
-旧系统和研究工具已经移动到根目录`archive/`，不会被正式入口导入。
+旧系统和研究工具已经移动到根目录`.archive/`，不会被正式入口导入。

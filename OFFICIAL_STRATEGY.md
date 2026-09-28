@@ -61,7 +61,7 @@
 
 最初历史节点收益使用全部候选等权平均；随后在固定30%总仓位下比较Top 3、Top 5、Top 10和全部候选。Top 5在现有7个实际开仓节点的3个月和6个月平均收益上最高，且6个月波动低于Top 3，因此V1正式采用Top 5、每只6%。
 
-这仍不是连续账户净值回测；完整口径和局限见`stock_selector/PORTFOLIO_BREADTH_VALIDATION.md`。
+这仍不是连续账户净值回测；完整口径和局限见`.archive/research/stock_selector/PORTFOLIO_BREADTH_VALIDATION.md`。
 
 ## 退出规则
 

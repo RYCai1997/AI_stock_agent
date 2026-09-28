@@ -18,11 +18,11 @@
 **/trading.log.*
 
 # Generated backtest artifacts
-llm_trading_agent/runs/
-llm_trading_agent/backtest_equity.csv
-llm_trading_agent/backtest_equity_chart.png
-llm_trading_agent/backtest_report.md
-llm_trading_agent/backtest_repro.json
+.archive/legacy/llm_trading_agent/runs/
+.archive/legacy/llm_trading_agent/backtest_equity.csv
+.archive/legacy/llm_trading_agent/backtest_equity_chart.png
+.archive/legacy/llm_trading_agent/backtest_report.md
+.archive/legacy/llm_trading_agent/backtest_repro.json
 stock_selector/outputs/
 stock_selector/data/cache/
 stock_selector/**/provider_cache/
