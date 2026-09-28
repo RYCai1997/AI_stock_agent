@@ -17,6 +17,7 @@ from backtest.report import write_report
 from backtest.variants import VARIANTS, VariantSignalProvider, run_index_variant
 from backtest.robustness import leave_one_window_out
 from backtest.parameter_stability import parameter_surface
+from backtest.monte_carlo import selection_monte_carlo
 
 
 def load_inputs(args: argparse.Namespace):
@@ -125,6 +126,12 @@ def main() -> None:
                 adjusted_stocks=adjusted_stocks, adjusted_index=adjusted_index,
             )
             surface.to_csv(output / "parameter_stability.csv", index=False)
+            monte_carlo = selection_monte_carlo(
+                windows=windows, snapshots=snapshots, bars=bars, actions=actions,
+                fee_model=fees, initial_cash=args.initial_cash,
+                actual_orders=engine.orders, iterations=1000, seed=20260928,
+            )
+            monte_carlo.to_csv(output / "monte_carlo_selection.csv", index=False)
     if args.all_variants:
         output.mkdir(parents=True, exist_ok=True)
         pd.DataFrame(comparison).to_csv(output / "variant_comparison.csv", index=False)

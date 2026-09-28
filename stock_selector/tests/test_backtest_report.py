@@ -82,3 +82,4 @@ class BacktestReportTests(unittest.TestCase):
             self.assertTrue((root / "report" / "window_influence.csv").exists())
             surface = pd.read_csv(root / "report" / "parameter_stability.csv")
             self.assertEqual(len(surface), 13)
+            self.assertTrue((root / "report" / "monte_carlo_selection.csv").exists())
