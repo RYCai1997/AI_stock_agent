@@ -56,6 +56,8 @@ python stock_selector\run_backtest.py --bars bars.csv --actions actions.csv `
 
 提供同日期的基准 CSV 后，报告还会输出满仓沪深300与“前一日策略仓位 × 当日沪深300收益”的动态敞口匹配基准、超额收益、跟踪误差、信息比率和 Beta。现金收益按0，指数价格是否含分红取决于输入来源。
 
+完整 H/V1 回放会逐个移除历史开仓窗口的新买入信号，并重跑账户路径，生成 `window_influence.csv`。这是影响诊断，删除强势窗口后的数字不是可实现的真实历史收益。
+
 公司行动 CSV 至少有 `date,ticker,kind` 表头；空表仅表示未提供事件，不证明历史期间没有事件。输入 manifest 必须写明 `bars_price_basis: "unadjusted"`，以及 `corporate_actions_status: "audited"` 或 `"unverified"`。输出的 `data_quality_report.md` 会披露未核对的事件和覆盖状态。
 
 ## 命令行与结果

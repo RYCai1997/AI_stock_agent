@@ -15,6 +15,7 @@ from backtest.fees import FeeModel, FeeSchedule
 from backtest.official import OfficialSnapshot
 from backtest.report import write_report
 from backtest.variants import VARIANTS, VariantSignalProvider, run_index_variant
+from backtest.robustness import leave_one_window_out
 
 
 def load_inputs(args: argparse.Namespace):
@@ -98,6 +99,17 @@ def main() -> None:
                                 variant_code=code, benchmark_prices=benchmark_frame)
         comparison.append({"variant": code, "label": spec.label,
                            "kind": spec.kind, **measures})
+        if code == "H":
+            windows = [row["signal_date"] for row in adapter.official.signal_audit
+                       if row["planned_buys"] > 0]
+            influence = leave_one_window_out(
+                windows=windows, bars=bars, actions=actions, fee_model=fees,
+                initial_cash=args.initial_cash,
+                provider_factory=lambda removed: VariantSignalProvider(
+                    VARIANTS["H"], snapshots, output / "influence_signal_audit" / removed),
+                benchmark_prices=benchmark_frame,
+            )
+            influence.to_csv(output / "window_influence.csv", index=False)
     if args.all_variants:
         output.mkdir(parents=True, exist_ok=True)
         pd.DataFrame(comparison).to_csv(output / "variant_comparison.csv", index=False)

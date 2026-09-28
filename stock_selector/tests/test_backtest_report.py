@@ -79,3 +79,4 @@ class BacktestReportTests(unittest.TestCase):
                 run_backtest.main()
             comparison = pd.read_csv(root / "report" / "variant_comparison.csv")
             self.assertEqual(comparison.variant.tolist(), list("ABCDEFGH"))
+            self.assertTrue((root / "report" / "window_influence.csv").exists())
