@@ -10,6 +10,7 @@ from math import isfinite
 class Position:
     quantity: int = 0
     average_cost: float = 0.0
+    stop_reference_price: float = 0.0
     entry_date: str | None = None
 
 
@@ -35,8 +36,10 @@ class Account:
             raise ValueError("insufficient cash")
         position = self.positions.setdefault(ticker, Position())
         old_basis = position.quantity * position.average_cost
+        old_stop_basis = position.quantity * position.stop_reference_price
         position.quantity += quantity
         position.average_cost = (old_basis + cost) / position.quantity
+        position.stop_reference_price = (old_stop_basis + quantity * price) / position.quantity
         if position.entry_date is None:
             position.entry_date = date
         self.cash -= cost

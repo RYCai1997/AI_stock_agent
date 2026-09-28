@@ -165,7 +165,7 @@ class BacktestEngine:
                 bar = day.get(ticker)
                 if bar is None:
                     continue
-                planned_stop = position.average_cost * (1 - self.stop_fraction)
+                planned_stop = position.stop_reference_price * (1 - self.stop_fraction)
                 trigger = stop_execution_price(bar.open, bar.low, planned_stop)
                 if trigger is None:
                     continue

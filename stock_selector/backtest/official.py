@@ -67,7 +67,7 @@ class OfficialSignalProvider:
             }
             holdings = pd.DataFrame([{
                 "ticker": ticker, "entry_date": position.entry_date,
-                "entry_price": position.average_cost, "quantity": position.quantity,
+                "entry_price": position.stop_reference_price, "quantity": position.quantity,
                 **{key: value for key, value in self.review_state.get(ticker, {}).items()
                    if not key.startswith("_")},
             } for ticker, position in account.positions.items()])

@@ -43,8 +43,10 @@ def apply_corporate_action(account: Account, action: CorporateAction) -> dict:
                     "data_confidence_degraded": True,
                     "detail": "fractional share or invalid post-action quantity"}
         old_basis = position.quantity * position.average_cost
+        old_stop_basis = position.quantity * position.stop_reference_price
         position.quantity = round(new_quantity)
         position.average_cost = old_basis / position.quantity
+        position.stop_reference_price = old_stop_basis / position.quantity
         event["new_quantity"] = position.quantity
     elif action.kind == "rights":
         if not action.exercise_rights:
@@ -64,9 +66,11 @@ def apply_corporate_action(account: Account, action: CorporateAction) -> dict:
             return {**event, "status": "unsupported", "manual_audit_required": True,
                     "data_confidence_degraded": True, "detail": "insufficient cash for rights"}
         old_basis = position.quantity * position.average_cost
+        old_stop_basis = position.quantity * position.stop_reference_price
         account.cash -= cost
         position.quantity += round(new_shares)
         position.average_cost = (old_basis + cost) / position.quantity
+        position.stop_reference_price = (old_stop_basis + cost) / position.quantity
         event["new_quantity"] = position.quantity
         event["cash_amount"] = -cost
     elif action.kind == "delisting":

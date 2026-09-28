@@ -38,3 +38,12 @@ class FeeTests(unittest.TestCase):
         self.assertAlmostEqual(result.daily_nav[-1]["fees"], result.trades[0]["fee"])
         self.assertAlmostEqual(result.daily_nav[-1]["cash"] + result.daily_nav[-1]["market_value"],
                                result.daily_nav[-1]["total_equity"])
+
+    def test_commission_does_not_raise_formal_stop_above_fill_price_basis(self):
+        bars = [DailyBar("2025-01-02", "A", 10, 10, 10, 10),
+                DailyBar("2025-01-03", "A", 10, 10, 10, 10),
+                DailyBar("2025-01-06", "A", 9.5, 9.6, 9.005, 9.4)]
+        result = BacktestEngine(100000, fee_model=FeeModel(self.model.schedules, slippage=0)).run(
+            bars, [Signal("2025-01-02", "A", "buy", .06)])
+        self.assertEqual(len(result.trades), 1)
+        self.assertIn("A", result.account.positions)
