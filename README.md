@@ -66,6 +66,8 @@ python stock_selector\run_backtest.py --bars bars.csv --actions actions.csv `
 
 `monte_carlo_selection.csv` 对每个实际开仓窗口以固定种子抽取至少1000个同数量、等权的随机组合，使用相同未复权逐日行情、费用和开盘成交规则，比较固定20交易日持有期。缺少完整可选股票路径或观察期时只写未运行原因；百分位是排序诊断，不能自动解释为统计显著性或严格样本外证据。
 
+沪深300历史成分仍需与中证指数公告逐日期核对；审计方法和当前证据缺口见 [DATA_UNIVERSE_AUDIT.md](DATA_UNIVERSE_AUDIT.md)。
+
 公司行动 CSV 至少有 `date,ticker,kind` 表头；空表仅表示未提供事件，不证明历史期间没有事件。输入 manifest 必须写明 `bars_price_basis: "unadjusted"`，以及 `corporate_actions_status: "audited"` 或 `"unverified"`。输出的 `data_quality_report.md` 会披露未核对的事件和覆盖状态。
 
 ## 命令行与结果

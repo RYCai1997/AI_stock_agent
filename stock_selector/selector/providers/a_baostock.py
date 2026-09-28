@@ -206,7 +206,9 @@ def build_a_metrics(
             raise ValueError("no verified CSI 300 membership snapshot")
         member_codes = [row["code"] for row in universe]
         original_members = len(universe)
-        membership_date = max(row["updateDate"] for row in universe)
+        update_dates = [row["updateDate"] for row in universe]
+        membership_updates_by_ticker = {row["code"]: row["updateDate"] for row in universe}
+        membership_date = max(update_dates)
         report(1, 2, 4, "已获取股票池；正在获取行业")
         industry_rows = _rows(bs.query_stock_industry(date=as_of))
         industries = {row["code"]: row for row in industry_rows}
@@ -233,6 +235,7 @@ def build_a_metrics(
                     )
                     if (cached_row and not legacy_missing_stability
                             and cached_row.get("price_as_of") == benchmark.get("price_as_of")):
+                        cached_row["membership_update_date"] = item["updateDate"]
                         cache_hits += 1
                         output.append(cached_row)
                         report(2, position, len(universe),
@@ -260,6 +263,7 @@ def build_a_metrics(
                     "industry_l2": industry_name,
                     "industry_source": industry.get("industryClassification", "Baostock"),
                     "universe_as_of": membership_date, "fundamental_as_of": filing_date,
+                    "membership_update_date": item["updateDate"],
                     "financial_period": quality["statDate"],
                     "roe": _number(profit.get("roeAvg")),
                     "cfo_to_revenue": _number(cash.get("CFOToOR")),
@@ -292,6 +296,10 @@ def build_a_metrics(
         metadata = {
             "market": "A", "universe": "CSI 300", "as_of": as_of,
             "membership_snapshot": membership_date, "original_members": original_members,
+            "membership_update_min": min(update_dates),
+            "membership_update_max": max(update_dates),
+            "membership_update_unique_count": len(set(update_dates)),
+            "membership_updates_by_ticker": membership_updates_by_ticker,
             "member_codes": member_codes,
             "requested_members": len(universe), "built_rows": len(frame), "errors": errors,
             "cache_hits": cache_hits, "market_trend": trend,

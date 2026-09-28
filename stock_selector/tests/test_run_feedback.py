@@ -79,7 +79,7 @@ class FeedbackTests(unittest.TestCase):
 
     def test_provider_counts_cache_success_and_failure(self):
         universe = [{"code": f"sh.60000{i}", "code_name": f"Company {i}",
-                     "updateDate": "2025-07-01"} for i in range(3)]
+                     "updateDate": f"2025-07-0{i + 1}"} for i in range(3)]
         bs = SimpleNamespace(login=Mock(return_value=SimpleNamespace(error_code="0")),
                              logout=Mock(), query_hs300_stocks=Mock(return_value=universe),
                              query_stock_industry=Mock(return_value=[]))
@@ -97,8 +97,13 @@ class FeedbackTests(unittest.TestCase):
                 patch("selector.providers.a_baostock._price_metrics", return_value=price):
             (Path(folder) / "2025-07-15_sh.600000.json").write_text(json.dumps({
                 "cache_version": 3, "as_of": "2025-07-15", "row": cached}), encoding="utf-8")
-            _, meta = build_a_metrics("2025-07-15", cache_dir=Path(folder), progress=lambda *e: events.append(e))
+            rows, meta = build_a_metrics("2025-07-15", cache_dir=Path(folder), progress=lambda *e: events.append(e))
         self.assertEqual(meta["cache_hits"], 1)
+        self.assertEqual(meta["membership_update_min"], "2025-07-01")
+        self.assertEqual(meta["membership_update_max"], "2025-07-03")
+        self.assertEqual(meta["membership_update_unique_count"], 3)
+        self.assertEqual(meta["membership_updates_by_ticker"]["sh.600001"], "2025-07-02")
+        self.assertEqual(rows.set_index("ticker").loc["sh.600000", "membership_update_date"], "2025-07-01")
         self.assertEqual(meta["built_rows"], 2)
         self.assertEqual(len(meta["errors"]), 1)
         completed = [e[1] for e in events if e[0] == 2]
