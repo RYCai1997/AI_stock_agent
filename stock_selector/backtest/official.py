@@ -10,7 +10,7 @@ import pandas as pd
 from selector.holding_review import review_holdings
 from selector.pipeline import run_selection
 from selector.portfolio_plan import build_portfolio_plan
-from selector.strategy import OFFICIAL_STRATEGY
+from selector.strategy import OFFICIAL_STRATEGY, OfficialStrategy
 
 from .account import Account
 from .engine import DailyBar, Signal
@@ -26,6 +26,7 @@ class OfficialSnapshot:
 class OfficialSignalProvider:
     snapshots: dict[str, OfficialSnapshot]
     audit_dir: Path
+    strategy: OfficialStrategy = OFFICIAL_STRATEGY
     review_state: dict[str, dict] = field(default_factory=dict)
     signal_audit: list[dict] = field(default_factory=list)
 
@@ -39,12 +40,12 @@ class OfficialSignalProvider:
             raise ValueError("incomplete point-in-time snapshot")
         market_trend = metadata["market_trend"]
         scored, _ = run_selection(
-            snapshot.metrics, OFFICIAL_STRATEGY.market, date,
-            self.audit_dir / date, market_trend, OFFICIAL_STRATEGY.selector_config(),
+            snapshot.metrics, self.strategy.market, date,
+            self.audit_dir / date, market_trend, self.strategy.selector_config(),
         )
         market_return = metadata.get("benchmark", {}).get("return_20d")
-        overheated = market_return is not None and market_return > OFFICIAL_STRATEGY.overheat_return_threshold
-        plan = build_portfolio_plan(scored, overheated=overheated)
+        overheated = market_return is not None and market_return > self.strategy.overheat_return_threshold
+        plan = build_portfolio_plan(scored, strategy=self.strategy, overheated=overheated)
         signals: list[Signal] = []
         if account.positions:
             self.review_state = {
@@ -64,6 +65,7 @@ class OfficialSignalProvider:
                       for ticker in account.positions if ticker in day}
             review = review_holdings(
                 holdings, scored, date, market_trend,
+                strategy=self.strategy,
                 member_codes=metadata.get("member_codes"), quotes=quotes,
                 expected_price_date=date,
             )

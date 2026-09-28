@@ -80,3 +80,5 @@ class BacktestReportTests(unittest.TestCase):
             comparison = pd.read_csv(root / "report" / "variant_comparison.csv")
             self.assertEqual(comparison.variant.tolist(), list("ABCDEFGH"))
             self.assertTrue((root / "report" / "window_influence.csv").exists())
+            surface = pd.read_csv(root / "report" / "parameter_stability.csv")
+            self.assertEqual(len(surface), 13)

@@ -59,6 +59,7 @@ class BacktestEngine:
     initial_cash: float
     fee_model: FeeModel = ZERO_COST_MODEL
     stop_enabled: bool = True
+    stop_fraction: float = OFFICIAL_STRATEGY.stop_loss_fraction
     account: Account = field(init=False)
     orders: list[Order] = field(default_factory=list)
     trades: list[dict] = field(default_factory=list)
@@ -67,6 +68,8 @@ class BacktestEngine:
     corporate_action_events: list[dict] = field(default_factory=list)
 
     def __post_init__(self) -> None:
+        if not isfinite(self.stop_fraction) or not 0 < self.stop_fraction < 1:
+            raise ValueError("stop_fraction must be in (0,1)")
         self.account = Account(self.initial_cash)
 
     def run(self, bars: list[DailyBar], signals: list[Signal],
@@ -162,7 +165,7 @@ class BacktestEngine:
                 bar = day.get(ticker)
                 if bar is None:
                     continue
-                planned_stop = position.average_cost * (1 - OFFICIAL_STRATEGY.stop_loss_fraction)
+                planned_stop = position.average_cost * (1 - self.stop_fraction)
                 trigger = stop_execution_price(bar.open, bar.low, planned_stop)
                 if trigger is None:
                     continue

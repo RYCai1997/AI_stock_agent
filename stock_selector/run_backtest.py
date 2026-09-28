@@ -16,6 +16,7 @@ from backtest.official import OfficialSnapshot
 from backtest.report import write_report
 from backtest.variants import VARIANTS, VariantSignalProvider, run_index_variant
 from backtest.robustness import leave_one_window_out
+from backtest.parameter_stability import parameter_surface
 
 
 def load_inputs(args: argparse.Namespace):
@@ -72,6 +73,10 @@ def main() -> None:
     parser.add_argument("--all-variants", action="store_true")
     parser.add_argument("--benchmark-bars", type=Path,
                         help="CSI300 index date,open,close,ema200 CSV for A/B variants")
+    parser.add_argument("--adjusted-bars", type=Path,
+                        help="Adjusted stock date,ticker,close history for EMA neighborhood")
+    parser.add_argument("--adjusted-benchmark-bars", type=Path,
+                        help="Adjusted CSI300 date,close history for EMA neighborhood")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     provenance, bars, actions, fees, snapshots = load_inputs(args)
@@ -111,6 +116,15 @@ def main() -> None:
                 benchmark_prices=benchmark_frame,
             )
             influence.to_csv(output / "window_influence.csv", index=False)
+            adjusted_stocks = pd.read_csv(args.adjusted_bars) if args.adjusted_bars else None
+            adjusted_index = pd.read_csv(args.adjusted_benchmark_bars) if args.adjusted_benchmark_bars else None
+            surface = parameter_surface(
+                snapshots=snapshots, bars=bars, actions=actions,
+                fee_model=fees, initial_cash=args.initial_cash,
+                audit_dir=output / "parameter_signal_audit",
+                adjusted_stocks=adjusted_stocks, adjusted_index=adjusted_index,
+            )
+            surface.to_csv(output / "parameter_stability.csv", index=False)
     if args.all_variants:
         output.mkdir(parents=True, exist_ok=True)
         pd.DataFrame(comparison).to_csv(output / "variant_comparison.csv", index=False)

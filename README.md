@@ -62,6 +62,8 @@ python stock_selector\run_backtest.py --bars bars.csv --actions actions.csv `
 
 `mae_mfe.csv` 记录已平仓交易持有期间的最不利与最有利盘中价格，以及止损后最多20个交易日的走势。观察期不足会标为 censored；涉及公司行动会标为需要人工审计。这些价格路径比较不等同于可实际持有的反事实组合收益。
 
+`parameter_stability.csv` 逐项测试 EMA 150/175/200/225/250、止损 7.5%/10%/12.5%/15%、Top N 3/5/7/10。Top N 实验保持单窗口30%并在 N 只股票间等权。EMA 实验要求额外提供 `--adjusted-bars` 和 `--adjusted-benchmark-bars` 的完整历史复权收盘价；缺失时记录未运行，不替换正式 EMA200。
+
 公司行动 CSV 至少有 `date,ticker,kind` 表头；空表仅表示未提供事件，不证明历史期间没有事件。输入 manifest 必须写明 `bars_price_basis: "unadjusted"`，以及 `corporate_actions_status: "audited"` 或 `"unverified"`。输出的 `data_quality_report.md` 会披露未核对的事件和覆盖状态。
 
 ## 命令行与结果
