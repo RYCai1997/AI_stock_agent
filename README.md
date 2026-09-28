@@ -52,6 +52,8 @@ python stock_selector\run_backtest.py --bars bars.csv --actions actions.csv `
   --input-manifest input_manifest.json --output reports\continuous_backtest
 ```
 
+加 `--all-variants --benchmark-bars csi300.csv` 可固定运行 A–H 并输出 `variant_comparison.csv`。A/B 使用指数开收盘和前一日 EMA200 构造理论敞口，不是可直接交易的沪深300订单，也不含券商费用；C–H 使用相同股票行情、账户、费率和成交引擎。各版本都是拆解研究，不能据此自动修改冻结的 H/V1 参数。
+
 公司行动 CSV 至少有 `date,ticker,kind` 表头；空表仅表示未提供事件，不证明历史期间没有事件。输入 manifest 必须写明 `bars_price_basis: "unadjusted"`，以及 `corporate_actions_status: "audited"` 或 `"unverified"`。输出的 `data_quality_report.md` 会披露未核对的事件和覆盖状态。
 
 ## 命令行与结果

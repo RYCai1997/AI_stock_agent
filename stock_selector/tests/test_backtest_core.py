@@ -89,3 +89,12 @@ class BacktestCoreTests(unittest.TestCase):
         result = BacktestEngine(100000).run(
             bars, [Signal(dates[0], "A", "buy", .06, delay_sessions=5)])
         self.assertEqual(result.trades[0]["actual_execution_date"], dates[6])
+
+    def test_ablation_can_disable_stop_without_changing_account_engine(self):
+        bars = [DailyBar("2025-01-02", "A", 10, 10, 10, 10),
+                DailyBar("2025-01-03", "A", 10, 10, 10, 10),
+                DailyBar("2025-01-06", "A", 9.5, 9.5, 8.5, 9.2)]
+        result = BacktestEngine(100000, stop_enabled=False).run(
+            bars, [Signal("2025-01-02", "A", "buy", .06)])
+        self.assertEqual(len(result.trades), 1)
+        self.assertIn("A", result.account.positions)

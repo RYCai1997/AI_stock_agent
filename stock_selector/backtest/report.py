@@ -16,7 +16,8 @@ from .metrics import performance
 
 
 def write_report(engine: BacktestEngine, output: Path, *, start: str, end: str,
-                 input_provenance: dict, snapshot_count: int) -> dict:
+                 input_provenance: dict, snapshot_count: int,
+                 variant_code: str = "H") -> dict:
     output.mkdir(parents=True, exist_ok=True)
     measures = performance(engine.daily_nav, engine.trades)
     pd.DataFrame(engine.daily_nav).to_csv(output / "daily_nav.csv", index=False)
@@ -42,12 +43,14 @@ def write_report(engine: BacktestEngine, output: Path, *, start: str, end: str,
         },
         backtest_configuration={"start": start, "end": end,
                                 "initial_cash": engine.initial_cash,
+                                "research_variant": variant_code,
                                 "signal_snapshots": snapshot_count,
                                 "input_provenance": input_provenance},
     )
     (output / "research_manifest.json").write_text(
         json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
     summary = ["# Continuous account backtest", "",
+               f"Research variant: {variant_code}.",
                "Retrospective historical validation; these dates are not strict out-of-sample data.", "",
                f"Period: {start} to {end}; monthly snapshots: {snapshot_count}.",
                f"Cumulative return after modelled costs: {measures['cumulative_return']:.2%}.",

@@ -58,6 +58,7 @@ class Order:
 class BacktestEngine:
     initial_cash: float
     fee_model: FeeModel = ZERO_COST_MODEL
+    stop_enabled: bool = True
     account: Account = field(init=False)
     orders: list[Order] = field(default_factory=list)
     trades: list[dict] = field(default_factory=list)
@@ -151,7 +152,7 @@ class BacktestEngine:
                                     "fee": fees.total,
                                     "planned_stop": order.planned_stop,
                                     "gap_loss": order.gap_loss})
-            for ticker, position in list(self.account.positions.items()):
+            for ticker, position in list(self.account.positions.items()) if self.stop_enabled else []:
                 if any(o.status == "pending" and o.side == "sell" and o.ticker == ticker for o in self.orders):
                     continue
                 bar = day.get(ticker)

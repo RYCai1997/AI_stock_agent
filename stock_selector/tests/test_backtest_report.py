@@ -72,3 +72,10 @@ class BacktestReportTests(unittest.TestCase):
                 run_backtest.main()
             self.assertEqual(len(pd.read_csv(root / "report" / "daily_nav.csv")), 3)
             self.assertEqual(len(pd.read_csv(root / "report" / "trades.csv")), 5)
+            pd.DataFrame([{"date": date, "open": 100, "close": 100, "ema200": 90}
+                          for date in dates]).to_csv(root / "benchmark.csv", index=False)
+            args += ["--all-variants", "--benchmark-bars", str(root / "benchmark.csv")]
+            with patch.object(sys, "argv", args), contextlib.redirect_stdout(io.StringIO()):
+                run_backtest.main()
+            comparison = pd.read_csv(root / "report" / "variant_comparison.csv")
+            self.assertEqual(comparison.variant.tolist(), list("ABCDEFGH"))

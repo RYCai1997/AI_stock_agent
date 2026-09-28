@@ -12,8 +12,9 @@ import pandas as pd
 from backtest.corporate_actions import CorporateAction
 from backtest.engine import BacktestEngine, DailyBar
 from backtest.fees import FeeModel, FeeSchedule
-from backtest.official import OfficialSignalProvider, OfficialSnapshot
+from backtest.official import OfficialSnapshot
 from backtest.report import write_report
+from backtest.variants import VARIANTS, VariantSignalProvider, run_index_variant
 
 
 def load_inputs(args: argparse.Namespace):
@@ -66,18 +67,43 @@ def main() -> None:
     parser.add_argument("--fee-config", type=Path, required=True)
     parser.add_argument("--input-manifest", type=Path, required=True)
     parser.add_argument("--initial-cash", type=float, default=1000000)
-    parser.add_argument("--output", type=Path, default=Path("reports/continuous_backtest"))
+    parser.add_argument("--variant", choices=sorted(VARIANTS), default="H")
+    parser.add_argument("--all-variants", action="store_true")
+    parser.add_argument("--benchmark-bars", type=Path,
+                        help="CSI300 index date,open,close,ema200 CSV for A/B variants")
+    parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     provenance, bars, actions, fees, snapshots = load_inputs(args)
-    adapter = OfficialSignalProvider(snapshots, args.output / "signal_audit")
-    engine = BacktestEngine(args.initial_cash, fee_model=fees).run(
-        bars, [], actions, signal_provider=adapter)
-    measures = write_report(engine, args.output, start=min(bar.date for bar in bars),
-                            end=max(bar.date for bar in bars),
-                            input_provenance=provenance, snapshot_count=len(snapshots))
-    serializable = {key: value if not isinstance(value, float) or math.isfinite(value) else None
-                    for key, value in measures.items()}
-    print(json.dumps({"output": str(args.output.resolve()), "performance": serializable},
+    output = args.output or (Path("reports/continuous_backtest") if args.variant == "H"
+                             else Path("reports/continuous_backtest/variants") / args.variant)
+    codes = sorted(VARIANTS) if args.all_variants else [args.variant]
+    if any(VARIANTS[code].kind == "index" for code in codes) and args.benchmark_bars is None:
+        parser.error("A/B variants require --benchmark-bars")
+    benchmark_frame = pd.read_csv(args.benchmark_bars) if args.benchmark_bars else None
+    comparison = []
+    for code in codes:
+        spec = VARIANTS[code]
+        variant_output = (output if not args.all_variants or code == "H"
+                          else output / "variants" / code)
+        if spec.kind == "index":
+            engine = run_index_variant(benchmark_frame, spec, args.initial_cash)
+        else:
+            adapter = VariantSignalProvider(spec, snapshots, variant_output / "signal_audit")
+            engine = BacktestEngine(args.initial_cash, fee_model=fees, stop_enabled=spec.stop_loss).run(
+                bars, [], actions, signal_provider=adapter)
+        measures = write_report(engine, variant_output,
+                                start=min(day["date"] for day in engine.daily_nav),
+                                end=max(day["date"] for day in engine.daily_nav),
+                                input_provenance=provenance, snapshot_count=len(snapshots),
+                                variant_code=code)
+        comparison.append({"variant": code, "label": spec.label,
+                           "kind": spec.kind, **measures})
+    if args.all_variants:
+        output.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(comparison).to_csv(output / "variant_comparison.csv", index=False)
+    serializable = [{key: value if not isinstance(value, float) or math.isfinite(value) else None
+                     for key, value in row.items()} for row in comparison]
+    print(json.dumps({"output": str(output.resolve()), "variants": serializable},
                      allow_nan=False, ensure_ascii=False, indent=2))
 
 
