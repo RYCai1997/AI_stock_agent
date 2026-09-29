@@ -1,0 +1,9 @@
+{
+  "rule": "first_market_session_on_or_after_15th",
+  "source": "Baostock query_trade_dates",
+  "source_sha256": "b18fff5f490337e4f6070e83c7b85b4b3010eca9f0ae9d8666b3fbea915b671e",
+  "first_month": "2020-03",
+  "last_month": "2025-07",
+  "signal_months": 65,
+  "calendar_sha256": "d467b9c3b1739bdcebdf5476ed8fba4b7fff09ba6055b84af6b8fa63f6ee0fe6"
+}
