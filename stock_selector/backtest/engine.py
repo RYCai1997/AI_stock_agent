@@ -50,8 +50,13 @@ class Order:
     actual_execution_date: str | None = None
     execution_price: float | None = None
     execution_block_reason: str | None = None
+    block_history: list[dict[str, str]] = field(default_factory=list)
     planned_stop: float | None = None
     gap_loss: float = 0.0
+
+    def record_block(self, date: str, reason: str) -> None:
+        self.execution_block_reason = reason
+        self.block_history.append({"date": date, "reason": reason})
 
 
 @dataclass
@@ -112,13 +117,13 @@ class BacktestEngine:
                             order.quantity = self.account.positions[action.ticker].quantity
                         else:
                             order.status = "cancelled"
-                            order.execution_block_reason = "corporate_action_reprice"
+                            order.record_block(date, "corporate_action_reprice")
             for order in self.orders:
                 if order.status != "pending" or order.intended_execution_date > date:
                     continue
                 bar = day.get(order.ticker)
                 if bar is None:
-                    order.execution_block_reason = "no_tradable_bar"
+                    order.record_block(date, "no_tradable_bar")
                     continue
                 block = fill_block_reason(
                     order.side, date=date, ticker=order.ticker, open_price=bar.open,
@@ -130,7 +135,7 @@ class BacktestEngine:
                     ),
                 )
                 if block:
-                    order.execution_block_reason = block
+                    order.record_block(date, block)
                     continue
                 execution_price = self.fee_model.execution_price(bar.open, order.side)
                 fees = self.fee_model.fee(date, order.side, order.quantity, execution_price)
@@ -138,7 +143,7 @@ class BacktestEngine:
                 if order.side == "buy":
                     if order.quantity * execution_price + fees.total > self.account.cash + 1e-8:
                         order.status = "cancelled"
-                        order.execution_block_reason = "insufficient_cash"
+                        order.record_block(date, "insufficient_cash")
                         continue
                     self.account.buy(order.ticker, order.quantity, execution_price, fees.total, date)
                 else:
@@ -184,7 +189,7 @@ class BacktestEngine:
                     ),
                 )
                 if block:
-                    order.execution_block_reason = block
+                    order.record_block(date, block)
                     continue
                 filled_quantity = position.quantity
                 execution_price = self.fee_model.execution_price(execution_price, "sell")

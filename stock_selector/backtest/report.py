@@ -31,7 +31,10 @@ def write_report(engine: BacktestEngine, output: Path, *, start: str, end: str,
     measures = performance(engine.daily_nav, engine.trades)
     pd.DataFrame(engine.daily_nav).to_csv(output / "daily_nav.csv", index=False)
     pd.DataFrame(engine.trades).to_csv(output / "trades.csv", index=False)
-    pd.DataFrame([asdict(order) for order in engine.orders]).to_csv(output / "orders.csv", index=False)
+    order_rows = [asdict(order) for order in engine.orders]
+    for row in order_rows:
+        row["block_history"] = json.dumps(row["block_history"], ensure_ascii=False)
+    pd.DataFrame(order_rows).to_csv(output / "orders.csv", index=False)
     pd.DataFrame(engine.positions).to_csv(output / "positions.csv", index=False)
     pd.DataFrame([measures]).to_csv(output / "performance.csv", index=False)
     winner_concentration(engine.trades).to_csv(output / "winner_concentration.csv", index=False)

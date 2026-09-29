@@ -42,6 +42,8 @@ class BacktestCoreTests(unittest.TestCase):
         result = BacktestEngine(100000).run(bars, [Signal("2025-01-02", "A", "buy", .06)])
         self.assertEqual(result.trades[0]["actual_execution_date"], "2025-01-06")
         self.assertEqual(result.orders[0].status, "filled")
+        self.assertEqual(result.orders[0].block_history,
+                         [{"date": "2025-01-03", "reason": "suspension"}])
 
     def test_open_limit_up_blocks_buy_then_fills_on_resume(self):
         bars = [DailyBar("2025-01-02", "A", 10, 10, 10, 10),
@@ -49,6 +51,8 @@ class BacktestCoreTests(unittest.TestCase):
                 DailyBar("2025-01-06", "A", 10.8, 11, 10.5, 10.8)]
         result = BacktestEngine(100000).run(bars, [Signal("2025-01-02", "A", "buy", .06)])
         self.assertEqual(result.trades[0]["actual_execution_date"], "2025-01-06")
+        self.assertEqual(result.orders[0].block_history,
+                         [{"date": "2025-01-03", "reason": "limit_up_buy_block"}])
 
     def test_consecutive_limit_down_blocks_sell(self):
         bars = [DailyBar("2025-01-02", "A", 10, 10, 10, 10),
@@ -61,6 +65,10 @@ class BacktestCoreTests(unittest.TestCase):
         result = BacktestEngine(100000).run(bars, signals)
         self.assertEqual(result.trades[-1]["actual_execution_date"], "2025-01-08")
         self.assertEqual(result.orders[-1].status, "filled")
+        self.assertEqual([event["reason"] for event in result.orders[-1].block_history],
+                         ["limit_down_sell_block", "limit_down_sell_block"])
+        self.assertEqual([event["date"] for event in result.orders[-1].block_history],
+                         ["2025-01-06", "2025-01-07"])
 
     def test_gap_below_stop_uses_worse_open(self):
         bars = [DailyBar("2025-01-02", "A", 10, 10, 10, 10),
