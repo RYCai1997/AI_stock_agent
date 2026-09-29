@@ -18,6 +18,7 @@ from backtest.variants import VARIANTS, VariantSignalProvider, run_index_variant
 from backtest.robustness import leave_one_window_out
 from backtest.parameter_stability import parameter_surface
 from backtest.monte_carlo import selection_monte_carlo
+from backtest.nested_attribution import NESTED_LADDER, NestedSignalProvider, incremental_attribution
 
 
 def validate_replay_price_inputs(bars_path: Path, benchmark_path: Path | None,
@@ -91,6 +92,8 @@ def main() -> None:
     parser.add_argument("--initial-cash", type=float, default=1000000)
     parser.add_argument("--variant", choices=sorted(VARIANTS), default="H")
     parser.add_argument("--all-variants", action="store_true")
+    parser.add_argument("--nested-attribution", action="store_true",
+                        help="Run the research-only R0-R7 single-mechanism ladder")
     parser.add_argument("--benchmark-bars", type=Path,
                         help="CSI300 index date,open,close,ema200 CSV for A/B variants")
     parser.add_argument("--price-audit", type=Path,
@@ -173,6 +176,25 @@ def main() -> None:
     if args.all_variants:
         output.mkdir(parents=True, exist_ok=True)
         pd.DataFrame(comparison).to_csv(output / "variant_comparison.csv", index=False)
+    if args.nested_attribution:
+        nested_rows = []
+        for layer in NESTED_LADDER:
+            layer_output = output / "nested_attribution" / layer.code
+            adapter = NestedSignalProvider(layer, snapshots, layer_output / "signal_audit")
+            engine = BacktestEngine(args.initial_cash, fee_model=fees,
+                                    stop_enabled=layer.stop_loss).run(
+                bars, [], actions, signal_provider=adapter, market_calendar=market_calendar)
+            measures = write_report(
+                engine, layer_output, start=min(day["date"] for day in engine.daily_nav),
+                end=max(day["date"] for day in engine.daily_nav),
+                input_provenance=provenance, snapshot_count=len(snapshots),
+                snapshot_dates=list(snapshots), variant_code=layer.code,
+                benchmark_prices=benchmark_frame, bars=bars, actions=actions)
+            nested_rows.append({"variant": layer.code, "label": layer.label, **measures})
+        output.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(nested_rows).to_csv(output / "nested_variant_comparison.csv", index=False)
+        incremental_attribution(nested_rows).to_csv(
+            output / "nested_incremental_attribution.csv", index=False)
     finalize_research_summary(output, comparison, provenance)
     serializable = [{key: value if not isinstance(value, float) or math.isfinite(value) else None
                      for key, value in row.items()} for row in comparison]

@@ -88,7 +88,8 @@ class BacktestReportTests(unittest.TestCase):
             self.assertEqual(len(pd.read_csv(root / "report" / "trades.csv")), 5)
             pd.DataFrame([{"date": date, "open": 100, "close": 100, "ema200": 90}
                           for date in dates]).to_csv(root / "benchmark.csv", index=False)
-            args += ["--all-variants", "--benchmark-bars", str(root / "benchmark.csv")]
+            args += ["--all-variants", "--nested-attribution",
+                     "--benchmark-bars", str(root / "benchmark.csv")]
             with patch.object(sys, "argv", args), contextlib.redirect_stdout(io.StringIO()):
                 run_backtest.main()
             comparison = pd.read_csv(root / "report" / "variant_comparison.csv")
@@ -97,6 +98,11 @@ class BacktestReportTests(unittest.TestCase):
             surface = pd.read_csv(root / "report" / "parameter_stability.csv")
             self.assertEqual(len(surface), 13)
             self.assertTrue((root / "report" / "monte_carlo_selection.csv").exists())
+            nested = pd.read_csv(root / "report" / "nested_incremental_attribution.csv")
+            self.assertEqual(nested.variant.tolist(), [f"R{index}" for index in range(8)])
+            full_nav = pd.read_csv(root / "report" / "daily_nav.csv")
+            r7_nav = pd.read_csv(root / "report" / "nested_attribution" / "R7" / "daily_nav.csv")
+            pd.testing.assert_frame_equal(full_nav, r7_nav)
             summary = (root / "report" / "summary.md").read_text(encoding="utf-8")
             self.assertIn("17. **UNRESOLVED**", summary)
             self.assertIn("retrospective", summary)
