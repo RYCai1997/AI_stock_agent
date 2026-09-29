@@ -52,6 +52,8 @@ GUI / CLI → Official strategy → Point-in-time provider → Scoring
 
 可先运行 `python stock_selector/audit_backtest_readiness.py --snapshots-dir <快照目录> --bars <未复权行情.csv> --actions <公司行动.csv> --benchmark-bars <沪深300行情.csv>` 检查月度快照和文件是否齐备。该命令只做输入预检；即使全部文件存在，公司行动和官方历史成分仍须单独核验。
 
+如需从公开来源准备未复权日线，可运行 `python stock_selector/collect_public_bars.py --snapshots-dir <快照目录> --start 2020-03-16 --end 2025-08-15 --output <本地输出目录>`。采集器保存逐股原始响应与来源校验信息；行情齐备仍不等于月度信号及公司行动已齐备。
+
 ```powershell
 python stock_selector\run_backtest.py --bars bars.csv --actions actions.csv `
   --snapshots-dir monthly_snapshots --fee-config fees.json `

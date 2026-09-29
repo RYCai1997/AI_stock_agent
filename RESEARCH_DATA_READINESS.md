@@ -8,6 +8,18 @@ Baostock 抽查了 2022-06-30、2023-06-30、2024-06-28、2025-06-30 的成分�
 
 东方财富公开日线接口的单只股票跨多年未复权查询已能快速返回；抽查浦发银行 2025-06-23 的开高低收与 Baostock 一致。这只是公开价格采集的可行性信号，尚未完成逐股覆盖、停牌、复权和公司行动审计。
 
+`stock_selector/collect_public_bars.py` 可从已有正式节点列出的股票并集中采集东方财富未复权日线和沪深300指数日线，逐只保存原始响应与 SHA-256，重启时复用缓存；同时输出价格 CSV 和 `source_audit.json`。只有全部序列成功时才命名为 `bars.csv`、`benchmark_raw.csv`。未返回的交易日不会被补造，原始响应也不等于已核实停牌、ST、涨跌停和公司行动。采集结束须检查 `complete_tickers`、各只首尾日期及跨源抽查，再决定是否用于诊断回放。
+
+首轮实采 472 条（471 只股票加沪深300指数）中只有 358 条成功；后续 114 条被接口断开连接。采集器会把未齐数据写为 `bars.partial.csv`、`benchmark_raw.partial.csv`，并在审计文件中标记 `collection_complete=false`；**不得把部分行情送入正式连续回测**。`--offline` 可在不重新请求接口的情况下从已存响应重新生成覆盖报告。即使全部补齐，前述 56 个缺失信号月份及公司行动问题仍未解决。
+
+```powershell
+$env:PYTHONPATH = (Resolve-Path stock_selector).Path
+python stock_selector/collect_public_bars.py `
+  --snapshots-dir stock_selector/outputs/research_data `
+  --start 2020-03-16 --end 2025-08-15 `
+  --output stock_selector/outputs/public_bars
+```
+
 当前缺少完整逐月正式快照、逐日未复权 OHLC、已核对公司行动、日期化实际券商费率和中证指数公告的历史成分对照。完整研究的输入预检命令：
 
 ```powershell
