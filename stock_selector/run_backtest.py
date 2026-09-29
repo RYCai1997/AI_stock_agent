@@ -13,7 +13,7 @@ from backtest.corporate_actions import CorporateAction
 from backtest.engine import BacktestEngine, DailyBar
 from backtest.fees import FeeModel, FeeSchedule
 from backtest.official import OfficialSnapshot
-from backtest.report import write_report, finalize_research_summary
+from backtest.report import write_report, finalize_research_summary, missing_signal_months
 from backtest.variants import VARIANTS, VariantSignalProvider, run_index_variant
 from backtest.robustness import leave_one_window_out
 from backtest.parameter_stability import parameter_surface
@@ -81,6 +81,8 @@ def main() -> None:
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     provenance, bars, actions, fees, snapshots = load_inputs(args)
+    provenance = {**provenance,
+                  "missing_signal_months": missing_signal_months(list(snapshots))}
     output = args.output or (Path("reports/continuous_backtest") if args.variant == "H"
                              else Path("reports/continuous_backtest/variants") / args.variant)
     codes = sorted(VARIANTS) if args.all_variants else [args.variant]
@@ -102,6 +104,7 @@ def main() -> None:
                                 start=min(day["date"] for day in engine.daily_nav),
                                 end=max(day["date"] for day in engine.daily_nav),
                                 input_provenance=provenance, snapshot_count=len(snapshots),
+                                snapshot_dates=list(snapshots),
                                 variant_code=code, benchmark_prices=benchmark_frame,
                                 bars=bars if spec.kind == "stock" else [], actions=actions)
         comparison.append({"variant": code, "label": spec.label,

@@ -1,5 +1,10 @@
 # 变更记录
 
+## Sparse historical signal coverage guard（2026-09-29）
+
+- 回测报告按输入信号日期检查首尾节点之间每个自然月；若缺月，在 `summary.md`、`data_quality_report.md` 和研究摘要中逐月列出，并把完整 V1 收益状态标为 **UNRESOLVED**。
+- 先用失败测试复现了相隔两个月的两个节点仍被报告称为月度快照的问题。修复只改变证据标签，不改变成交、账户净值或冻结策略参数。
+
 ## Windows CI output encoding fix（2026-09-29）
 
 - GitHub Actions Windows 测试环境明确设置 `PYTHONIOENCODING=utf-8`，使正式入口的中文进度和汇报可写入标准输出。

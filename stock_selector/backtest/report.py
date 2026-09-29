@@ -21,8 +21,18 @@ from .corporate_actions import CorporateAction
 from .engine import DailyBar
 
 
+def missing_signal_months(snapshot_dates: list[str]) -> list[str]:
+    """Find skipped calendar review months between the first and last signal."""
+    if not snapshot_dates:
+        return []
+    observed = {pd.Period(date, freq="M") for date in snapshot_dates}
+    expected = pd.period_range(min(observed), max(observed), freq="M")
+    return [str(month) for month in expected if month not in observed]
+
+
 def write_report(engine: BacktestEngine, output: Path, *, start: str, end: str,
                  input_provenance: dict, snapshot_count: int,
+                 snapshot_dates: list[str] | None = None,
                  variant_code: str = "H",
                  benchmark_prices: pd.DataFrame | None = None,
                  bars: list[DailyBar] | None = None,
@@ -52,6 +62,9 @@ def write_report(engine: BacktestEngine, output: Path, *, start: str, end: str,
     quality += "\nCSI300 historical constituent completeness requires a separate official-notice audit.\n"
     quality += "Opening limit checks are conservative proxies without order-book queue data.\n"
     quality += "Fee schedules are explicit input assumptions; historical broker rates require independent verification.\n"
+    missing_months = missing_signal_months(snapshot_dates or [])
+    if missing_months:
+        quality += f"Missing monthly signal snapshots: {', '.join(missing_months)}.\n"
     (output / "data_quality_report.md").write_text(quality, encoding="utf-8")
     manifest = build_research_manifest(
         as_of=end,
@@ -77,12 +90,15 @@ def write_report(engine: BacktestEngine, output: Path, *, start: str, end: str,
     summary = ["# Continuous account backtest", "",
                f"Research variant: {variant_code}.",
                "Retrospective historical validation; these dates are not strict out-of-sample data.", "",
-               f"Period: {start} to {end}; monthly snapshots: {snapshot_count}.",
+               f"Period: {start} to {end}; signal snapshots: {snapshot_count}.",
                f"Cumulative return after modelled costs: {measures['cumulative_return']:.2%}.",
                f"Maximum drawdown: {measures['maximum_drawdown']:.2%}.",
                f"Transaction costs: {measures['total_transaction_costs']:.2f}.",
                f"Manual corporate-action audit events: {sum(e.get('manual_audit_required', False) for e in engine.corporate_action_events)}.",
                ""]
+    if missing_months:
+        summary += [f"Missing signal months: {', '.join(missing_months)}.",
+                    "This is not a complete monthly V1 replay; performance describes only the supplied sparse signal path."]
     if benchmark_metrics is not None:
         summary += [f"Full CSI300 cumulative return: {benchmark_metrics['full_csi300_cumulative_return']:.2%}.",
                     f"Exposure-matched CSI300 cumulative return: {benchmark_metrics['matched_csi300_cumulative_return']:.2%}.",
@@ -124,14 +140,15 @@ def finalize_research_summary(output: Path, comparison: list[dict],
     top_three = winner_values.get("top_3_trade_share_of_winner_profits", float("nan"))
     completed_monte = monte.loc[monte["status"].eq("completed")] if len(monte) else pd.DataFrame()
     completed_params = parameters.loc[parameters["status"].eq("completed")] if len(parameters) else pd.DataFrame()
-    result_status = "TENTATIVE"
+    missing_months = input_provenance.get("missing_signal_months", [])
+    result_status = "UNRESOLVED" if missing_months else "TENTATIVE"
 
     lines = ["# Continuous portfolio historical research", "",
              "This is retrospective historical validation. Dates used to design V1 are not strict out-of-sample data.",
              "Returns below are conditional on the supplied snapshots, raw prices, corporate actions and fee schedules.",
              "SUPPORTED — The ledger enforces cash plus marked position value equals total equity under supplied inputs.",
              "", "## Requested questions", "",
-             f"1. **{result_status}** — V1 ending NAV: {1 + full['cumulative_return']:.4f}; cumulative return {pct(full['cumulative_return'])}.",
+             f"1. **{result_status}** — {'Sparse-input' if missing_months else 'V1'} ending NAV: {1 + full['cumulative_return']:.4f}; cumulative return {pct(full['cumulative_return'])}.",
              f"2. **{result_status}** — Maximum drawdown: {pct(full['maximum_drawdown'])}.",
              f"3. **{result_status}** — Cost-after return: {pct(full['cumulative_return'])}; modelled transaction costs {full['total_transaction_costs']:.2f}."]
     if b is not None:
@@ -142,6 +159,8 @@ def finalize_research_summary(output: Path, comparison: list[dict],
     else:
         lines += ["4. **UNRESOLVED** — Full CSI300 comparison needs aligned benchmark prices.",
                   "5. **UNRESOLVED** — Exposure-matched CSI300 needs aligned benchmark prices."]
+    if missing_months:
+        lines.append(f"Missing signal months: {', '.join(missing_months)}. This is not a complete monthly V1 replay.")
     if "A" in by_variant and "B" in by_variant:
         timing_delta = by_variant["B"]["cumulative_return"] - by_variant["A"]["cumulative_return"]
         lines.append(f"6. **TENTATIVE** — Index-proxy EMA timing difference B−A: {pct(timing_delta)}; this is not pure stock-strategy attribution.")

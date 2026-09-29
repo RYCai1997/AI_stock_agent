@@ -17,6 +17,20 @@ from test_selector import sample_frame
 
 
 class BacktestReportTests(unittest.TestCase):
+    def test_sparse_signal_months_are_not_presented_as_complete_v1(self):
+        dates = ["2025-01-02", "2025-01-03", "2025-03-03"]
+        bars = [DailyBar(date, "A", 10, 10.1, 9.9, 10) for date in dates]
+        engine = BacktestEngine(100000).run(bars, [Signal(dates[0], "A", "buy", .06)])
+        with tempfile.TemporaryDirectory() as folder:
+            output = Path(folder)
+            write_report(engine, output, start=dates[0], end=dates[-1],
+                         input_provenance={"bars_price_basis": "unadjusted",
+                                           "corporate_actions_status": "unverified"},
+                         snapshot_count=2, snapshot_dates=[dates[0], dates[-1]])
+            summary = (output / "summary.md").read_text(encoding="utf-8")
+            self.assertIn("Missing signal months: 2025-02", summary)
+            self.assertIn("not a complete monthly V1 replay", summary)
+
     def test_report_writes_account_artifacts_and_quality_limits(self):
         dates = ["2025-01-02", "2025-01-03", "2025-01-06"]
         bars = [DailyBar(date, "A", 10, 10.1, 9.9, 10) for date in dates]

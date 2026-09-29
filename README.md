@@ -48,6 +48,8 @@ GUI / CLI → Official strategy → Point-in-time provider → Scoring
 
 运行前需备齐逐日**未复权** OHLC CSV、每月正式运行的 `raw_metrics.csv` 与 `official_run_metadata.json`、公司行动 CSV、日期化费率 JSON，以及说明价格口径和公司行动覆盖状态的输入 manifest。缺少这些历史数据时不能得出连续回测收益。命令格式：
 
+报告会列出首尾节点之间缺少正式信号快照的月份。使用稀疏历史节点时，账户仍可按输入路径回放，但结果不能称为完整月度 V1 连续回测。
+
 ```powershell
 python stock_selector\run_backtest.py --bars bars.csv --actions actions.csv `
   --snapshots-dir monthly_snapshots --fee-config fees.json `
