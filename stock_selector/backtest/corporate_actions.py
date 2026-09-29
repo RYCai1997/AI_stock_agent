@@ -34,6 +34,10 @@ def apply_corporate_action(account: Account, action: CorporateAction) -> dict:
         account.cash += amount
         account.dividends += amount
         event["cash_amount"] = amount
+        event["dividend_tax_model"] = "gross_no_withholding"
+        event["manual_audit_required"] = True
+        event["data_confidence_degraded"] = True
+        event["detail"] = "A-share dividend withholding tax is not simulated; gross cash is credited"
     elif action.kind in {"bonus", "conversion", "split"}:
         if not isfinite(action.share_ratio) or action.share_ratio <= -1:
             raise ValueError("invalid share ratio")

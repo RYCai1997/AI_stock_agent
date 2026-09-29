@@ -65,6 +65,7 @@ def write_report(engine: BacktestEngine, output: Path, *, start: str, end: str,
     quality += (f"Trading sessions with at least one stale held-position valuation: {stale_days}. "
                 "Last valid close is carried for NAV only, never used as an execution price.\n")
     quality += "Fee schedules are explicit input assumptions; historical broker rates require independent verification.\n"
+    quality += "A-share dividend withholding tax is not simulated; supplied cash dividends are credited gross.\n"
     missing_months = missing_signal_months(snapshot_dates or [])
     if missing_months:
         quality += f"Missing monthly signal snapshots: {', '.join(missing_months)}.\n"

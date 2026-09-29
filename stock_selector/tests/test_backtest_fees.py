@@ -1,12 +1,25 @@
 from __future__ import annotations
 
 import unittest
+import json
+from pathlib import Path
 
 from backtest.engine import BacktestEngine, DailyBar, Signal
 from backtest.fees import FeeModel, FeeSchedule
 
 
 class FeeTests(unittest.TestCase):
+    def test_frozen_research_fee_assumptions_cover_boundary_dates(self):
+        path = Path(__file__).resolve().parents[2] / "research_fee_assumptions.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        model = FeeModel(tuple(FeeSchedule(**item) for item in data["schedules"]),
+                         slippage=data["slippage"])
+        self.assertEqual(model.schedule_for("2022-04-28").transfer_fee, .00002)
+        self.assertEqual(model.schedule_for("2022-04-29").transfer_fee, .00001)
+        self.assertEqual(model.schedule_for("2023-08-27").stamp_duty, .001)
+        self.assertEqual(model.schedule_for("2023-08-28").stamp_duty, .0005)
+        self.assertEqual(model.schedule_for("2025-07-31").minimum_commission, 5)
+
     def setUp(self):
         self.model = FeeModel((
             FeeSchedule("2020-01-01", "2023-08-27", .0003, 5, .001, .00002),

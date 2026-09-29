@@ -19,6 +19,15 @@ class CorporateActionTests(unittest.TestCase):
         self.assertEqual(account.positions["A"].average_cost, 5)
         self.assertEqual(account.mark({"A": 5})["total_equity"], 10050)
 
+    def test_gross_dividend_explicitly_discloses_unmodelled_tax(self):
+        account = Account(10000)
+        account.buy("A", 100, 10)
+        event = apply_corporate_action(account, CorporateAction(
+            "2025-01-03", "A", "dividend", cash_per_share=.5))
+        self.assertEqual(event["dividend_tax_model"], "gross_no_withholding")
+        self.assertTrue(event["data_confidence_degraded"])
+        self.assertIn("tax", data_quality_report([event]).lower())
+
     def test_rights_require_explicit_decision_and_reprice_basis(self):
         account = Account(10000)
         account.buy("A", 100, 10)
