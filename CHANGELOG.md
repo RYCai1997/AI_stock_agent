@@ -1,5 +1,10 @@
 # 变更记录
 
+## Windows CI output encoding fix（2026-09-29）
+
+- GitHub Actions Windows 测试环境明确设置 `PYTHONIOENCODING=utf-8`，使正式入口的中文进度和汇报可写入标准输出。
+- 推送后 CI 的既有 `test_official_entry_exports_guidance_and_preserves_research_mode` 首先在 `cp1252` 环境复现 `UnicodeEncodeError`；此修复不改变策略参数、成交或回测收益。
+
 ## Research backtest order block audit（2026-09-28）
 
 - 订单现在保留逐日受阻日期与原因，包含停牌、无可交易行情、涨跌停和最终取消原因；成交后历史仍可在 `orders.csv` 的 `block_history` 查看。
