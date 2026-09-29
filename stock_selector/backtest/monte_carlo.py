@@ -87,3 +87,14 @@ def selection_monte_carlo(*, windows: list[str], snapshots: dict[str, OfficialSn
                      "actual_percentile_at_or_below":
                      100 * sum(value <= actual for value in random_returns) / iterations})
     return pd.DataFrame(rows)
+
+
+def selection_monte_carlo_horizons(*, horizons: tuple[int, ...] = (20, 63, 126),
+                                   **kwargs) -> pd.DataFrame:
+    """Apply the same frozen sample and seed to predeclared trading-day horizons."""
+    if not horizons or len(set(horizons)) != len(horizons) or any(day <= 0 for day in horizons):
+        raise ValueError("horizons must be distinct positive trading-day counts")
+    return pd.concat(
+        [selection_monte_carlo(horizon_sessions=day, **kwargs) for day in horizons],
+        ignore_index=True,
+    )

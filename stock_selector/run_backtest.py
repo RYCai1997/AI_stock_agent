@@ -17,7 +17,7 @@ from backtest.report import write_report, finalize_research_summary, missing_sig
 from backtest.variants import VARIANTS, VariantSignalProvider, run_index_variant
 from backtest.robustness import leave_one_window_out
 from backtest.parameter_stability import parameter_surface
-from backtest.monte_carlo import selection_monte_carlo
+from backtest.monte_carlo import selection_monte_carlo_horizons
 from backtest.nested_attribution import NESTED_LADDER, NestedSignalProvider, incremental_attribution
 
 
@@ -167,7 +167,7 @@ def main() -> None:
                 market_calendar=market_calendar,
             )
             surface.to_csv(output / "parameter_stability.csv", index=False)
-            monte_carlo = selection_monte_carlo(
+            monte_carlo = selection_monte_carlo_horizons(
                 windows=windows, snapshots=snapshots, bars=bars, actions=actions,
                 fee_model=fees, initial_cash=args.initial_cash,
                 actual_orders=engine.orders, iterations=1000, seed=20260928,
