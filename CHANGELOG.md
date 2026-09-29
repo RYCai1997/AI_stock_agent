@@ -1,5 +1,10 @@
 # 变更记录
 
+## Historical input readiness audit（2026-09-29）
+
+- 新增只读预检命令，核对正式节点的原始指标、provider 日期、构建数量和取数错误，列出缺失的信号月份及行情、公司行动、基准文件是否存在。
+- 预检不会把文件存在解释为公司行动或官方历史成分已通过审计；当前九个真实节点在 2020-03 至 2025-07 的 65 个月中缺 56 个月，尚不足以运行完整月度 V1 验证。
+
 ## Sparse historical signal coverage guard（2026-09-29）
 
 - 回测报告按输入信号日期检查首尾节点之间每个自然月；若缺月，在 `summary.md`、`data_quality_report.md` 和研究摘要中逐月列出，并把完整 V1 收益状态标为 **UNRESOLVED**。

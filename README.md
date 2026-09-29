@@ -50,6 +50,8 @@ GUI / CLI → Official strategy → Point-in-time provider → Scoring
 
 报告会列出首尾节点之间缺少正式信号快照的月份。使用稀疏历史节点时，账户仍可按输入路径回放，但结果不能称为完整月度 V1 连续回测。
 
+可先运行 `python stock_selector/audit_backtest_readiness.py --snapshots-dir <快照目录> --bars <未复权行情.csv> --actions <公司行动.csv> --benchmark-bars <沪深300行情.csv>` 检查月度快照和文件是否齐备。该命令只做输入预检；即使全部文件存在，公司行动和官方历史成分仍须单独核验。
+
 ```powershell
 python stock_selector\run_backtest.py --bars bars.csv --actions actions.csv `
   --snapshots-dir monthly_snapshots --fee-config fees.json `
