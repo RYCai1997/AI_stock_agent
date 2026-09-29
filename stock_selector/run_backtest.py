@@ -20,8 +20,27 @@ from backtest.parameter_stability import parameter_surface
 from backtest.monte_carlo import selection_monte_carlo
 
 
+def validate_replay_price_inputs(bars_path: Path, benchmark_path: Path | None,
+                                 provenance: dict, price_audit_path: Path | None = None) -> None:
+    for path in (bars_path, benchmark_path):
+        if path and path.name.endswith(".partial.csv"):
+            raise ValueError(f"partial price input cannot enter replay: {path}")
+    if provenance.get("price_collection_complete") is False:
+        raise ValueError("partial price collection cannot enter replay")
+    if price_audit_path:
+        audit = json.loads(price_audit_path.read_text(encoding="utf-8"))
+        if (not audit.get("collection_complete")
+                or audit.get("complete_tickers") != audit.get("requested_tickers")):
+            raise ValueError("partial public price audit cannot enter replay")
+        if not any(row.get("ticker") == "sh.000300" and row.get("status") == "ok"
+                   for row in audit.get("series", [])):
+            raise ValueError("benchmark is missing from public price audit")
+
+
 def load_inputs(args: argparse.Namespace):
     provenance = json.loads(args.input_manifest.read_text(encoding="utf-8"))
+    validate_replay_price_inputs(args.bars, getattr(args, "benchmark_bars", None), provenance,
+                                 getattr(args, "price_audit", None))
     if provenance.get("bars_price_basis") != "unadjusted":
         raise ValueError("input manifest must confirm unadjusted execution bars")
     if provenance.get("corporate_actions_status") not in {"audited", "unverified"}:
@@ -74,6 +93,8 @@ def main() -> None:
     parser.add_argument("--all-variants", action="store_true")
     parser.add_argument("--benchmark-bars", type=Path,
                         help="CSI300 index date,open,close,ema200 CSV for A/B variants")
+    parser.add_argument("--price-audit", type=Path,
+                        help="Public collection coverage audit; incomplete coverage blocks replay")
     parser.add_argument("--market-calendar", type=Path,
                         help="CSV with date column: complete market sessions, including no-stock-bar days")
     parser.add_argument("--adjusted-bars", type=Path,

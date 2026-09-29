@@ -12,6 +12,7 @@ import hashlib
 import json
 import time
 from pathlib import Path
+from typing import Callable
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -67,6 +68,21 @@ def fetch_one(ticker: str, start: str, end: str) -> bytes:
         return response.read()
 
 
+def request_with_retry(request: Callable[[], bytes], *, attempts: int = 3,
+                       sleep: Callable[[float], None] = time.sleep,
+                       base_delay: float = 1.0) -> bytes:
+    if attempts < 1 or base_delay < 0:
+        raise ValueError("attempts must be positive and base_delay nonnegative")
+    for index in range(attempts):
+        try:
+            return request()
+        except OSError:
+            if index + 1 == attempts:
+                raise
+            sleep(base_delay * (2 ** index))
+    raise AssertionError("unreachable retry state")
+
+
 def output_name(stem: str, complete: int, requested: int) -> str:
     return f"{stem}.csv" if complete == requested else f"{stem}.partial.csv"
 
@@ -78,9 +94,14 @@ def main() -> None:
     parser.add_argument("--end", default="2025-08-15")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--offline", action="store_true", help="Rebuild coverage from saved responses without new requests")
+    parser.add_argument("--max-attempts", type=int, default=3)
+    parser.add_argument("--request-interval", type=float, default=1.0,
+                        help="Minimum seconds between first requests for uncached tickers")
     args = parser.parse_args()
     if args.start > args.end:
         parser.error("start must be no later than end")
+    if args.max_attempts < 1 or args.request_interval < 0:
+        parser.error("max-attempts must be positive and request-interval nonnegative")
     files = sorted(args.snapshots_dir.glob("*/raw_metrics.csv"))
     if not files:
         parser.error("no official snapshot metrics found")
@@ -92,6 +113,7 @@ def main() -> None:
     cache.mkdir(exist_ok=True)
     rows = []
     audit = []
+    last_request_time = 0.0
     for index, ticker in enumerate(tickers, 1):
         target = cache / f"{ticker}_{args.start}_{args.end}.json"
         try:
@@ -101,7 +123,10 @@ def main() -> None:
             else:
                 if args.offline:
                     raise FileNotFoundError("public response not cached")
-                raw = fetch_one(ticker, args.start, args.end)
+                time.sleep(max(0.0, args.request_interval - (time.monotonic() - last_request_time)))
+                last_request_time = time.monotonic()
+                raw = request_with_retry(lambda: fetch_one(ticker, args.start, args.end),
+                                         attempts=args.max_attempts)
                 # Validate before placing an external response in the resumable cache.
                 parse_klines(json.loads(raw), ticker, args.start, args.end)
                 target.write_bytes(raw)
@@ -115,8 +140,6 @@ def main() -> None:
             audit.append({"ticker": ticker, "status": "error", "error": str(exc)})
         if index % 25 == 0 or index == len(tickers):
             print(f"{index}/{len(tickers)} public price series checked", flush=True)
-        if not target.exists() and not args.offline:
-            time.sleep(0.2)
     complete = sum(a["status"] == "ok" for a in audit)
     fields = ["date", "ticker", "open", "high", "low", "close", "tradable"]
     for stem, selected in (("bars", [r for r in rows if r["ticker"] != "sh.000300"]),

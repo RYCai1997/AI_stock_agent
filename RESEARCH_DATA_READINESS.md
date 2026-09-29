@@ -12,12 +12,15 @@ Baostock 抽查了 2022-06-30、2023-06-30、2024-06-28、2025-06-30 的成分�
 
 首轮实采 472 条（471 只股票加沪深300指数）中只有 358 条成功；后续 114 条被接口断开连接。采集器会把未齐数据写为 `bars.partial.csv`、`benchmark_raw.partial.csv`，并在审计文件中标记 `collection_complete=false`；**不得把部分行情送入正式连续回测**。`--offline` 可在不重新请求接口的情况下从已存响应重新生成覆盖报告。即使全部补齐，前述 56 个缺失信号月份及公司行动问题仍未解决。
 
+加入单 ticker 有界重试、指数退避与请求节流后，续传达到 **465/472**，沪深300指数已取得。仍失败的七只为 `sz.002812`、`sz.002821`、`sz.002841`、`sz.300014`、`sz.300760`、`sz.300832`、`sz.300866`；审计文件逐只保留错误。缩短其中一只的请求区间仍被断开；结果继续保持 `collection_complete=false`，文件仍标为 partial。
+
 ```powershell
 $env:PYTHONPATH = (Resolve-Path stock_selector).Path
 python stock_selector/collect_public_bars.py `
   --snapshots-dir stock_selector/outputs/research_data `
   --start 2020-03-16 --end 2025-08-15 `
-  --output stock_selector/outputs/public_bars
+  --output stock_selector/outputs/public_bars `
+  --max-attempts 3 --request-interval 2
 ```
 
 当前缺少完整逐月正式快照、逐日未复权 OHLC、已核对公司行动、日期化实际券商费率和中证指数公告的历史成分对照。完整研究的输入预检命令：
