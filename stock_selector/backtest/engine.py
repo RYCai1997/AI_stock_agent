@@ -80,6 +80,7 @@ class BacktestEngine:
     def run(self, bars: list[DailyBar], signals: list[Signal],
             actions: list[CorporateAction] | None = None,
             signal_provider: Callable[[str, Account, dict[str, DailyBar]], list[Signal]] | None = None,
+            market_calendar: list[str] | None = None,
             ) -> "BacktestEngine":
         by_date: dict[str, dict[str, DailyBar]] = {}
         for bar in bars:
@@ -88,9 +89,19 @@ class BacktestEngine:
             if bar.ticker in by_date.setdefault(bar.date, {}):
                 raise ValueError("duplicate daily bar")
             by_date[bar.date][bar.ticker] = bar
-        dates = sorted(by_date)
+        if market_calendar is not None:
+            if market_calendar != sorted(set(market_calendar)):
+                raise ValueError("market calendar must contain sorted unique sessions")
+            if set(by_date) - set(market_calendar):
+                raise ValueError("bar date is outside market calendar")
+            dates = market_calendar
+        else:
+            dates = sorted(by_date)
         if not dates:
             raise ValueError("no trading dates")
+        last_valid_close: dict[str, float] = {}
+        last_valid_date: dict[str, str] = {}
+        reference_unverified: set[str] = set()
         signal_map: dict[str, list[Signal]] = {}
         action_map: dict[str, list[CorporateAction]] = {}
         for action in actions or []:
@@ -104,10 +115,14 @@ class BacktestEngine:
                 raise ValueError("invalid signal")
             signal_map.setdefault(signal.signal_date, []).append(signal)
         for index, date in enumerate(dates):
-            day = by_date[date]
-            previous = by_date[dates[index - 1]] if index else {}
+            day = by_date.get(date, {})
             for action in action_map.get(date, []):
                 event = apply_corporate_action(self.account, action)
+                if action.kind in {"bonus", "conversion", "split", "rights"}:
+                    reference_unverified.add(action.ticker)
+                    event["manual_audit_required"] = True
+                    event["data_confidence_degraded"] = True
+                    event["detail"] = "post-action exchange limit reference requires source verification"
                 self.corporate_action_events.append(event)
                 if event["status"] == "applied" and action.kind in {"bonus", "conversion", "split", "rights"}:
                     for order in self.orders:
@@ -123,13 +138,17 @@ class BacktestEngine:
                     continue
                 bar = day.get(order.ticker)
                 if bar is None:
-                    order.record_block(date, "no_tradable_bar")
+                    order.record_block(date, "missing_security_bar")
+                    continue
+                if (order.ticker in reference_unverified
+                        and (bar.limit_up is None or bar.limit_down is None)):
+                    order.record_block(date, "corporate_action_limit_reference_unverified")
                     continue
                 block = fill_block_reason(
                     order.side, date=date, ticker=order.ticker, open_price=bar.open,
                     tradable=bar.tradable,
                     context=LimitContext(
-                        previous_close=previous[order.ticker].close if order.ticker in previous else None,
+                        previous_close=last_valid_close.get(order.ticker),
                         explicit_limit_up=bar.limit_up, explicit_limit_down=bar.limit_down,
                         is_st=bar.is_st,
                     ),
@@ -168,7 +187,10 @@ class BacktestEngine:
                 if any(o.status == "pending" and o.side == "sell" and o.ticker == ticker for o in self.orders):
                     continue
                 bar = day.get(ticker)
-                if bar is None:
+                if bar is None or not bar.tradable:
+                    continue
+                if (ticker in reference_unverified
+                        and (bar.limit_up is None or bar.limit_down is None)):
                     continue
                 planned_stop = position.stop_reference_price * (1 - self.stop_fraction)
                 trigger = stop_execution_price(bar.open, bar.low, planned_stop)
@@ -183,7 +205,7 @@ class BacktestEngine:
                     "sell", date=date, ticker=ticker, open_price=bar.open,
                     tradable=bar.tradable,
                     context=LimitContext(
-                        previous_close=previous[ticker].close if ticker in previous else None,
+                        previous_close=last_valid_close.get(ticker),
                         explicit_limit_up=bar.limit_up, explicit_limit_down=bar.limit_down,
                         is_st=bar.is_st,
                     ),
@@ -209,15 +231,26 @@ class BacktestEngine:
                                     "fee": fees.total,
                                     "realized_pnl": self.account.realized_pnl - prior_realized,
                                     "planned_stop": planned_stop, "gap_loss": order.gap_loss})
-            prices = {ticker: bar.close for ticker, bar in day.items()}
+            stale = {ticker for ticker in self.account.positions
+                     if ticker not in day or not day[ticker].tradable}
+            for ticker, bar in day.items():
+                if bar.tradable:
+                    last_valid_close[ticker] = bar.close
+                    last_valid_date[ticker] = date
+                    reference_unverified.discard(ticker)
+            prices = {ticker: last_valid_close[ticker] for ticker in self.account.positions
+                      if ticker in last_valid_close}
             snapshot = self.account.mark(prices)
             self.daily_nav.append({"date": date, **snapshot,
+                                   "stale_positions": len(stale),
                                    "pending_orders": sum(o.status == "pending" for o in self.orders)})
             for ticker, position in self.account.positions.items():
                 self.positions.append({"date": date, "ticker": ticker,
                                        "quantity": position.quantity,
                                        "average_cost": position.average_cost,
                                        "valuation_price": prices[ticker],
+                                       "valuation_price_date": last_valid_date[ticker],
+                                       "valuation_stale": ticker in stale,
                                        "market_value": position.quantity * prices[ticker]})
             if index + 1 == len(dates):
                 continue

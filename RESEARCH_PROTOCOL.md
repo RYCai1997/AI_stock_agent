@@ -6,7 +6,7 @@
 
 研究区间预先固定为 2020-03 至 2025-07，每个自然月恰好一次完整筛选。运行日为**当月第一个日期大于或等于 15 日的 Baostock A 股市场交易日**，于该日收盘后计算信号；成交只能从后续可交易时点模拟。选择规则只读市场开市日，不读取收益、因子或候选股票。不得逐月人工改变日期，也不得根据回测结果重新选择起止月份。
 
-完整 65 个月的预定日期保存在 [`stock_selector/data_history/schema/signal_calendar_2020-03_2025-07.csv`](stock_selector/data_history/schema/signal_calendar_2020-03_2025-07.csv)。[`signal_calendar_manifest.json`](stock_selector/data_history/schema/signal_calendar_manifest.json) 记录原始交易日响应和冻结 CSV 的 SHA-256。原始 Baostock `query_trade_dates` 响应保存在忽略 Git 的 `stock_selector/outputs/history/baostock_trade_dates_2020-03_2025-07.csv`，可用以下命令重新取得并离线生成：
+完整 65 个月的预定日期保存在 [`stock_selector/data_history/schema/signal_calendar_2020-03_2025-07.csv`](stock_selector/data_history/schema/signal_calendar_2020-03_2025-07.csv)。账户回放的预定终点为 **2025-07-31 收盘**；末期未平仓头寸继续按当日市值计入账户，后续持有路径不在本次固定样本区间内。[`market_sessions_2020-03_2025-07.csv`](stock_selector/data_history/schema/market_sessions_2020-03_2025-07.csv) 保存 1316 个市场交易日，包括个别股票可能无行情的日子。[`signal_calendar_manifest.json`](stock_selector/data_history/schema/signal_calendar_manifest.json) 记录原始交易日响应和两个冻结 CSV 的 SHA-256。原始 Baostock `query_trade_dates` 响应保存在忽略 Git 的 `stock_selector/outputs/history/baostock_trade_dates_2020-03_2025-07.csv`，可用以下命令重新取得并离线生成：
 
 ```powershell
 $env:PYTHONPATH = (Resolve-Path stock_selector).Path
@@ -16,6 +16,7 @@ python stock_selector/data_history/builders/fetch_market_calendar.py `
 python stock_selector/data_history/calendar.py `
   --source-csv stock_selector/outputs/history/baostock_trade_dates_2020-03_2025-07.csv `
   --output-csv stock_selector/data_history/schema/signal_calendar_2020-03_2025-07.csv `
+  --market-sessions-csv stock_selector/data_history/schema/market_sessions_2020-03_2025-07.csv `
   --manifest stock_selector/data_history/schema/signal_calendar_manifest.json
 ```
 

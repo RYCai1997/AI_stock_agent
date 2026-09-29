@@ -61,6 +61,9 @@ def write_report(engine: BacktestEngine, output: Path, *, start: str, end: str,
         quality += "\nInput corporate-action coverage is unverified; historical NAV confidence is degraded.\n"
     quality += "\nCSI300 historical constituent completeness requires a separate official-notice audit.\n"
     quality += "Opening limit checks are conservative proxies without order-book queue data.\n"
+    stale_days = sum(int(row.get("stale_positions", 0) > 0) for row in engine.daily_nav)
+    quality += (f"Trading sessions with at least one stale held-position valuation: {stale_days}. "
+                "Last valid close is carried for NAV only, never used as an execution price.\n")
     quality += "Fee schedules are explicit input assumptions; historical broker rates require independent verification.\n"
     missing_months = missing_signal_months(snapshot_dates or [])
     if missing_months:
@@ -95,6 +98,7 @@ def write_report(engine: BacktestEngine, output: Path, *, start: str, end: str,
                f"Maximum drawdown: {measures['maximum_drawdown']:.2%}.",
                f"Transaction costs: {measures['total_transaction_costs']:.2f}.",
                f"Manual corporate-action audit events: {sum(e.get('manual_audit_required', False) for e in engine.corporate_action_events)}.",
+               f"Sessions with stale held-position valuation: {stale_days}.",
                ""]
     if missing_months:
         summary += [f"Missing signal months: {', '.join(missing_months)}.",

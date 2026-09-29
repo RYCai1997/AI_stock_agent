@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import unittest
 import csv
+import hashlib
+import json
 from pathlib import Path
 
 from data_history.calendar import generate_signal_calendar
@@ -16,6 +18,17 @@ class SignalCalendarTests(unittest.TestCase):
         self.assertEqual(rows[0], {"month": "2020-03", "signal_date": "2020-03-16"})
         self.assertEqual(rows[-1], {"month": "2025-07", "signal_date": "2025-07-15"})
         self.assertEqual(len({row["month"] for row in rows}), 65)
+
+    def test_frozen_market_sessions_match_manifest(self):
+        root = Path(__file__).resolve().parents[1] / "data_history" / "schema"
+        path = root / "market_sessions_2020-03_2025-07.csv"
+        manifest = json.loads((root / "signal_calendar_manifest.json").read_text(encoding="utf-8"))
+        with path.open(newline="", encoding="utf-8") as stream:
+            dates = [row["date"] for row in csv.DictReader(stream)]
+        self.assertEqual(len(dates), 1316)
+        self.assertEqual(dates, sorted(set(dates)))
+        self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(),
+                         manifest["market_sessions_sha256"])
 
     def test_first_session_on_or_after_fifteenth_is_deterministic(self):
         sessions = ["2025-02-17", "2025-01-16", "2025-01-15", "2025-02-14",

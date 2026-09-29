@@ -18,7 +18,8 @@ def leave_one_window_out(*, windows: list[str], bars: list[DailyBar],
                          actions: list[CorporateAction], fee_model: FeeModel,
                          initial_cash: float,
                          provider_factory: Callable[[str], Callable],
-                         benchmark_prices: pd.DataFrame | None = None) -> pd.DataFrame:
+                         benchmark_prices: pd.DataFrame | None = None,
+                         market_calendar: list[str] | None = None) -> pd.DataFrame:
     rows = []
     for removed in sorted(set(windows)):
         provider = provider_factory(removed)
@@ -29,7 +30,7 @@ def leave_one_window_out(*, windows: list[str], bars: list[DailyBar],
                     if not (date == removed and signal.side == "buy")]
 
         engine = BacktestEngine(initial_cash, fee_model=fee_model).run(
-            bars, [], actions, signal_provider=filtered)
+            bars, [], actions, signal_provider=filtered, market_calendar=market_calendar)
         measures = performance(engine.daily_nav, engine.trades)
         row = {"removed_window": removed,
                "cumulative_return": measures["cumulative_return"],

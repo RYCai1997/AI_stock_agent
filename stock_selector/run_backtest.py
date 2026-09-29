@@ -74,6 +74,8 @@ def main() -> None:
     parser.add_argument("--all-variants", action="store_true")
     parser.add_argument("--benchmark-bars", type=Path,
                         help="CSI300 index date,open,close,ema200 CSV for A/B variants")
+    parser.add_argument("--market-calendar", type=Path,
+                        help="CSV with date column: complete market sessions, including no-stock-bar days")
     parser.add_argument("--adjusted-bars", type=Path,
                         help="Adjusted stock date,ticker,close history for EMA neighborhood")
     parser.add_argument("--adjusted-benchmark-bars", type=Path,
@@ -81,14 +83,24 @@ def main() -> None:
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     provenance, bars, actions, fees, snapshots = load_inputs(args)
+    market_calendar = None
+    if args.market_calendar:
+        calendar_frame = pd.read_csv(args.market_calendar, dtype={"date": str})
+        if "date" not in calendar_frame:
+            parser.error("market calendar CSV requires date column")
+        market_calendar = calendar_frame["date"].tolist()
     provenance = {**provenance,
-                  "missing_signal_months": missing_signal_months(list(snapshots))}
+                  "missing_signal_months": missing_signal_months(list(snapshots)),
+                  "market_calendar": str(args.market_calendar) if args.market_calendar else "inferred_from_bars"}
     output = args.output or (Path("reports/continuous_backtest") if args.variant == "H"
                              else Path("reports/continuous_backtest/variants") / args.variant)
     codes = sorted(VARIANTS) if args.all_variants else [args.variant]
     if any(VARIANTS[code].kind == "index" for code in codes) and args.benchmark_bars is None:
         parser.error("A/B variants require --benchmark-bars")
     benchmark_frame = pd.read_csv(args.benchmark_bars) if args.benchmark_bars else None
+    if market_calendar and benchmark_frame is not None:
+        if set(benchmark_frame["date"].astype(str)) != set(market_calendar):
+            parser.error("benchmark dates must cover every explicit market session")
     comparison = []
     for code in codes:
         spec = VARIANTS[code]
@@ -99,7 +111,7 @@ def main() -> None:
         else:
             adapter = VariantSignalProvider(spec, snapshots, variant_output / "signal_audit")
             engine = BacktestEngine(args.initial_cash, fee_model=fees, stop_enabled=spec.stop_loss).run(
-                bars, [], actions, signal_provider=adapter)
+                bars, [], actions, signal_provider=adapter, market_calendar=market_calendar)
         measures = write_report(engine, variant_output,
                                 start=min(day["date"] for day in engine.daily_nav),
                                 end=max(day["date"] for day in engine.daily_nav),
@@ -118,6 +130,7 @@ def main() -> None:
                 provider_factory=lambda removed: VariantSignalProvider(
                     VARIANTS["H"], snapshots, output / "influence_signal_audit" / removed),
                 benchmark_prices=benchmark_frame,
+                market_calendar=market_calendar,
             )
             influence.to_csv(output / "window_influence.csv", index=False)
             adjusted_stocks = pd.read_csv(args.adjusted_bars) if args.adjusted_bars else None
@@ -127,6 +140,7 @@ def main() -> None:
                 fee_model=fees, initial_cash=args.initial_cash,
                 audit_dir=output / "parameter_signal_audit",
                 adjusted_stocks=adjusted_stocks, adjusted_index=adjusted_index,
+                market_calendar=market_calendar,
             )
             surface.to_csv(output / "parameter_stability.csv", index=False)
             monte_carlo = selection_monte_carlo(

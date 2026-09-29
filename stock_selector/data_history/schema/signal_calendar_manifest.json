@@ -5,5 +5,7 @@
   "first_month": "2020-03",
   "last_month": "2025-07",
   "signal_months": 65,
-  "calendar_sha256": "d467b9c3b1739bdcebdf5476ed8fba4b7fff09ba6055b84af6b8fa63f6ee0fe6"
+  "calendar_sha256": "d467b9c3b1739bdcebdf5476ed8fba4b7fff09ba6055b84af6b8fa63f6ee0fe6",
+  "market_sessions_sha256": "73b1f7cd32ecf6a8b672e527be6a40a28ea160e2ee4d57fbd353dc93f69f3187",
+  "market_sessions": 1316
 }

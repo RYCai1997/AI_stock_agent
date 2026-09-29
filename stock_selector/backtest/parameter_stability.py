@@ -52,7 +52,8 @@ def parameter_surface(*, snapshots: dict[str, OfficialSnapshot],
                       fee_model: FeeModel, initial_cash: float,
                       audit_dir: Path,
                       adjusted_stocks: pd.DataFrame | None = None,
-                      adjusted_index: pd.DataFrame | None = None) -> pd.DataFrame:
+                      adjusted_index: pd.DataFrame | None = None,
+                      market_calendar: list[str] | None = None) -> pd.DataFrame:
     rows = []
     scenarios = ([('ema', value) for value in EMA_VALUES] +
                  [('stop', value) for value in STOP_VALUES] +
@@ -84,7 +85,8 @@ def parameter_surface(*, snapshots: dict[str, OfficialSnapshot],
         engine = BacktestEngine(
             initial_cash, fee_model=fee_model,
             stop_fraction=value if parameter == "stop" else OFFICIAL_STRATEGY.stop_loss_fraction,
-        ).run(bars, [], actions, signal_provider=provider)
+        ).run(bars, [], actions, signal_provider=provider,
+              market_calendar=market_calendar)
         measures = performance(engine.daily_nav, engine.trades)
         rows.append({**row, "status": "completed",
                      "cumulative_return": measures["cumulative_return"],

@@ -56,10 +56,12 @@ def main() -> None:
     parser.add_argument("--first-month", default="2020-03")
     parser.add_argument("--last-month", default="2025-07")
     parser.add_argument("--output-csv", type=Path, required=True)
+    parser.add_argument("--market-sessions-csv", type=Path)
     parser.add_argument("--manifest", type=Path, required=True)
     args = parser.parse_args()
     raw = args.source_csv.read_bytes()
-    rows = generate_signal_calendar(load_baostock_trade_dates(args.source_csv),
+    sessions = load_baostock_trade_dates(args.source_csv)
+    rows = generate_signal_calendar(sessions,
                                     args.first_month, args.last_month)
     args.output_csv.parent.mkdir(parents=True, exist_ok=True)
     with args.output_csv.open("w", newline="", encoding="utf-8") as stream:
@@ -69,6 +71,14 @@ def main() -> None:
     manifest = {"rule": RULE, "source": SOURCE, "source_sha256": hashlib.sha256(raw).hexdigest(),
                 "first_month": args.first_month, "last_month": args.last_month,
                 "signal_months": len(rows), "calendar_sha256": hashlib.sha256(args.output_csv.read_bytes()).hexdigest()}
+    if args.market_sessions_csv:
+        args.market_sessions_csv.parent.mkdir(parents=True, exist_ok=True)
+        with args.market_sessions_csv.open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.writer(stream)
+            writer.writerow(["date"])
+            writer.writerows([[day] for day in sessions if args.first_month <= day[:7] <= args.last_month])
+        manifest["market_sessions_sha256"] = hashlib.sha256(args.market_sessions_csv.read_bytes()).hexdigest()
+        manifest["market_sessions"] = sum(args.first_month <= day[:7] <= args.last_month for day in sessions)
     args.manifest.parent.mkdir(parents=True, exist_ok=True)
     args.manifest.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(manifest, ensure_ascii=False))
