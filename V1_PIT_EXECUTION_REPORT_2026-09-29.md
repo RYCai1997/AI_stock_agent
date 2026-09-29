@@ -55,8 +55,9 @@
 6. `cad5fd2` — 日期化费用与税前分红披露。
 7. `f9ba593` — 嵌套单机制归因阶梯。
 8. `0ada6af` — 20/63/126 日 Monte Carlo 诊断。
+9. `388668c` — 首版完整执行报告。
 
-每个逻辑阶段在提交前运行完整 `python -m unittest discover -s stock_selector/tests`；最近一次 **113 项通过**。单测验证的是实现与测试输入，不构成真实历史收益证据。CI 与远端同步状态以最终推送后核实为准。
+每个逻辑阶段在提交前运行完整 `python -m unittest discover -s stock_selector/tests`；最近一次 **113 项通过**。单测验证的是实现与测试输入，不构成真实历史收益证据。`origin/main` 已核实指向 `388668c54bac64fc98901db720d08925ac591b60`；公开 GitHub 页面可匿名读取。[Deterministic unittest suite #5](https://github.com/RYCai1997/AI_stock_agent/actions/runs/36532562327) 对 `388668c` 显示 **completed success**。
 
 本地复核：
 
