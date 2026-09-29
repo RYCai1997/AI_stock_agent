@@ -4,7 +4,7 @@
 
 ## 当前证据状态
 
-本仓库不包含已核验的中证指数历史全量成分表，也没有可复核的逐日期公告比对结果。本次环境未安装 Baostock，无法在此生成实时历史快照。因此历史成分完整性仍为 **UNRESOLVED**；不能把 `membership_snapshot=max(updateDate)` 当作整池一致更新日期或无幸存者偏差证明。
+本仓库不包含已核验的中证指数历史全量成分表，也没有可复核的逐日期公告比对结果。当前默认 Python 环境未直接配置 Baostock；工作区另有可用的 Baostock 依赖目录，但尚未收集并核验完整月度历史快照。因此历史成分完整性仍为 **UNRESOLVED**；不能把 `membership_snapshot=max(updateDate)` 当作整池一致更新日期或无幸存者偏差证明。
 
 正式 provider 现在另外保存 `membership_update_min`、`membership_update_max`、`membership_update_unique_count`、逐股票 `membership_update_date` 及 `membership_updates_by_ticker`。这些是数据源返回状态，不等于中证指数公告的生效日期。
 
