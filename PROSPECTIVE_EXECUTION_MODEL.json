@@ -1,0 +1,15 @@
+{
+  "execution_model_version": "1.0",
+  "frozen_on": "2026-09-30",
+  "source": "research_fee_assumptions.json rates carried forward prospectively",
+  "broker_verified": false,
+  "timing": "next_tradable_open",
+  "slippage": 0.001,
+  "commission_rate": 0.0003,
+  "minimum_commission": 5.0,
+  "seller_stamp_duty": 0.0005,
+  "transfer_fee_both_sides": 0.00001,
+  "dividend_tax": "not_simulated_gross_dividend",
+  "effective_from": "2026-10-01",
+  "effective_to": null
+}
