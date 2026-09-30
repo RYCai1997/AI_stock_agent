@@ -70,7 +70,9 @@ def compare_node(date: str, reference: tuple[pd.DataFrame, dict],
         paired = pd.DataFrame({"reference": a, "candidate": b}).dropna()
         summary[f"{field}_paired_count"] = len(paired)
         summary[f"{field}_max_abs_diff"] = float((paired.candidate - paired.reference).abs().max()) if len(paired) else None
-        summary[f"{field}_spearman"] = (float(paired.reference.corr(paired.candidate, method="spearman"))
+        # Pearson correlation of average ranks is Spearman's rho and keeps the
+        # audit runnable with the repository's numpy+pandas-only CI dependencies.
+        summary[f"{field}_spearman"] = (float(paired.reference.rank().corr(paired.candidate.rank()))
                                          if len(paired) >= 3 and paired.reference.nunique() > 1
                                          and paired.candidate.nunique() > 1 else None)
         for ticker, values in paired.iterrows():

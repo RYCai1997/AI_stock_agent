@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
+import sys
 
 from data_history.provider_equivalence import compare_node
 from test_selector import sample_frame
@@ -12,7 +14,8 @@ class ProviderEquivalenceTests(unittest.TestCase):
         metrics = sample_frame(100)
         metrics["return_20d"] = 0.03
         metadata = {"market_trend": "up", "membership_snapshot": date}
-        row, detail = compare_node(date, (metrics, metadata), (metrics.copy(), metadata))
+        with patch.dict(sys.modules, {"scipy": None}):
+            row, detail = compare_node(date, (metrics, metadata), (metrics.copy(), metadata))
         self.assertEqual(row["member_overlap_count"], 100)
         self.assertEqual(row["price_max_abs_diff"], 0)
         self.assertEqual(row["quality_pass_agreement"], 1)
