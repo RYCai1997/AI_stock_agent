@@ -24,15 +24,19 @@ def prospective_fee_model(config_path: Path) -> FeeModel:
     return FeeModel((schedule,), slippage=config["slippage"])
 
 
-def _append_verified(path: Path, rows: list[dict]) -> None:
+def _checked_offset(path: Path, rows: list[dict]) -> int:
     existing = []
     if path.exists():
         existing = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
     if len(existing) > len(rows) or rows[:len(existing)] != existing:
         raise ValueError(f"shadow history drift; old rows cannot be rewritten: {path.name}")
+    return len(existing)
+
+
+def _append_verified(path: Path, rows: list[dict], offset: int) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
-        for row in rows[len(existing):]:
+        for row in rows[offset:]:
             handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
 
 
@@ -76,12 +80,6 @@ def replay_continuous_shadow(*, prediction_dirs: list[Path], bars: list[DailyBar
         adapter = OfficialSignalProvider(snapshots, Path(folder))
         engine = BacktestEngine(initial_cash, fee_model=prospective_fee_model(fee_config)).run(
             bars, [], actions, signal_provider=adapter, market_calendar=market_calendar)
-    shadow_dir.mkdir(parents=True, exist_ok=True)
-    if not manifest_path.exists():
-        with manifest_path.open("x", encoding="utf-8") as handle:
-            json.dump(manifest, handle, ensure_ascii=False, indent=2)
-    _append_verified(shadow_dir / "shadow_nav.jsonl", engine.daily_nav)
-    _append_verified(shadow_dir / "shadow_positions.jsonl", engine.positions)
     order_intents = [{"signal_date": order.signal_date,
                       "intended_execution_date": order.intended_execution_date,
                       "ticker": order.ticker, "side": order.side,
@@ -97,9 +95,6 @@ def replay_continuous_shadow(*, prediction_dirs: list[Path], bars: list[DailyBar
                                  "side": order.side, "event": "filled",
                                  "execution_price": order.execution_price})
     order_events.sort(key=lambda row: (row["date"], row["ticker"], row["side"], row["event"]))
-    _append_verified(shadow_dir / "shadow_orders.jsonl", order_intents)
-    _append_verified(shadow_dir / "shadow_order_events.jsonl", order_events)
-    _append_verified(shadow_dir / "shadow_trades.jsonl", engine.trades)
     date = market_calendar[-1]
     checkpoint = {"date": date, "cash": engine.account.cash,
                   "positions": {ticker: asdict(position) for ticker, position in engine.account.positions.items()},
@@ -108,11 +103,24 @@ def replay_continuous_shadow(*, prediction_dirs: list[Path], bars: list[DailyBar
                   "realized_pnl": engine.account.realized_pnl,
                   "nav": engine.daily_nav[-1]["daily_nav"]}
     path = shadow_dir / "checkpoints" / f"{date}.json"
-    path.parent.mkdir(exist_ok=True)
     if path.exists():
         if json.loads(path.read_text(encoding="utf-8")) != checkpoint:
             raise ValueError("existing shadow checkpoint changed")
-    else:
+    outputs = {"shadow_nav.jsonl": engine.daily_nav,
+               "shadow_positions.jsonl": engine.positions,
+               "shadow_orders.jsonl": order_intents,
+               "shadow_order_events.jsonl": order_events,
+               "shadow_trades.jsonl": engine.trades}
+    offsets = {name: _checked_offset(shadow_dir / name, rows)
+               for name, rows in outputs.items()}
+    shadow_dir.mkdir(parents=True, exist_ok=True)
+    if not manifest_path.exists():
+        with manifest_path.open("x", encoding="utf-8") as handle:
+            json.dump(manifest, handle, ensure_ascii=False, indent=2)
+    for name, rows in outputs.items():
+        _append_verified(shadow_dir / name, rows, offsets[name])
+    path.parent.mkdir(exist_ok=True)
+    if not path.exists():
         with path.open("x", encoding="utf-8") as handle:
             json.dump(checkpoint, handle, ensure_ascii=False, indent=2)
     return engine

@@ -72,3 +72,23 @@ class ProspectiveShadowAccountTests(unittest.TestCase):
             self.assertLess(second.account.cash, 1000000)
             self.assertEqual(json.loads((shadow_dir / "shadow_manifest.json").read_text())
                              ["initial_cash"], 1000000)
+
+    def test_order_drift_rejects_replay_before_appending_nav(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            prediction = self._package(root, "2026-10-15")
+            tickers = sample_frame(300).ticker.tolist()
+            dates = ["2026-10-15", "2026-10-16"]
+            bars = [DailyBar(date, ticker, 100, 101, 99, 100)
+                    for date in dates for ticker in tickers]
+            shadow_dir = root / "prospective" / "shadow"
+            replay_continuous_shadow(prediction_dirs=[prediction], bars=bars[:300],
+                                     actions=[], market_calendar=dates[:1],
+                                     shadow_dir=shadow_dir, fee_config=FEE)
+            nav_before = (shadow_dir / "shadow_nav.jsonl").read_bytes()
+            (shadow_dir / "shadow_orders.jsonl").write_text('{"tampered":true}\n')
+            with self.assertRaisesRegex(ValueError, "history drift"):
+                replay_continuous_shadow(prediction_dirs=[prediction], bars=bars,
+                                         actions=[], market_calendar=dates,
+                                         shadow_dir=shadow_dir, fee_config=FEE)
+            self.assertEqual((shadow_dir / "shadow_nav.jsonl").read_bytes(), nav_before)
