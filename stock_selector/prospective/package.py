@@ -100,7 +100,7 @@ def create_prediction_package(*, prospective_root: Path, retrospective_root: Pat
         raise ValueError(f"missing prediction package files: {sorted(missing)}")
     if not quality.get("primary_eligible"):
         raise ValueError("core public input coverage is incomplete")
-    if provenance.get("dirty") and not allow_dirty:
+    if provenance.get("dirty") and evidence_label == "prospective" and not allow_dirty:
         raise ValueError("clean git tree required; use --allow-dirty for degraded research")
     if not provenance.get("git_commit"):
         raise ValueError("git commit required")

@@ -18,6 +18,7 @@ SOURCE_HIERARCHY = {
 CORE_FIELDS = (
     "historical_csi300_membership", "qvm_factors", "financial_publication_dates",
     "momentum_history", "ema200", "latest_price", "security_eligibility",
+    "historical_industry",
 )
 
 WARNING_FIELDS = ("nonheld_security_corporate_action", "secondary_source_availability",
@@ -28,7 +29,7 @@ def assess_quality(coverage: dict[str, bool], fallback_count: int,
                    warnings: list[str] | None = None) -> dict:
     if fallback_count < 0:
         raise ValueError("fallback_count cannot be negative")
-    missing = [name for name in CORE_FIELDS if coverage.get(name) is not True]
+    missing = [name for name in CORE_FIELDS if not bool(coverage.get(name, False))]
     details = {key: coverage.get(key, False) for key in (
         "universe_complete", "fundamental_complete", "price_complete",
         "security_state_complete", "corporate_action_complete",

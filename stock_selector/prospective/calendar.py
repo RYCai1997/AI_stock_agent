@@ -21,7 +21,7 @@ def signal_day_decision(now: datetime, sessions: list[str],
     chosen = research_date or today
     if chosen[:7] != today[:7] or chosen != today:
         return {"signal_date": chosen, "prospective_primary": False,
-                "evidence_label": "retrospective_reconstruction",
+                "evidence_label": "retrospective_reconstruction" if chosen < today else "research_only",
                 "reason": "requested date differs from actual Shanghai generation date"}
     if local.time() < time(15, 0):
         return {"signal_date": chosen, "prospective_primary": False,
