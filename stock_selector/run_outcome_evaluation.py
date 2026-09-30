@@ -12,6 +12,8 @@ import pandas as pd
 
 from data_public.archive import sha256
 from evaluation.outcomes import HORIZONS, evaluate_outcome
+from evaluation.registry import register_evaluation
+from evaluation.performance import build_performance
 
 
 def main() -> None:
@@ -34,6 +36,15 @@ def main() -> None:
         benchmark_prices=pd.read_csv(args.benchmark_prices, dtype={"date": str}),
         price_source_manifest=source, horizon_sessions=args.horizon,
         evaluated_at=datetime.now(ZoneInfo("Asia/Shanghai")), output_root=args.output_root)
+    record = json.loads((args.prediction_dir / "prediction_record.json").read_text(encoding="utf-8"))
+    if record["prospective_primary"]:
+        prospective_root = args.prediction_dir.parent
+        register_evaluation(args.prediction_dir, result,
+                            prospective_root / "evaluation_registry.csv")
+        build_performance(prospective_root / "prospective_registry.csv",
+                          prospective_root / "evaluation_registry.csv",
+                          prospective_root / "shadow",
+                          prospective_root / "prospective_performance.csv")
     print(json.dumps({"status": "evaluated", "output": str(result.resolve())}))
 
 
