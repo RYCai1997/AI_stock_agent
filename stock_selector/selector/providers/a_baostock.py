@@ -38,6 +38,15 @@ def _rows(result: Any) -> list[dict[str, str]]:
     return values
 
 
+def _captured_rows(result: Any, endpoint: str, parameters: dict,
+                   recorder=None) -> list[dict[str, str]]:
+    """Preserve the Baostock SDK table before downstream factor normalization."""
+    rows = _rows(result)
+    if recorder is not None:
+        recorder(endpoint, parameters, list(result.fields), rows)
+    return rows
+
+
 def _number(value: Any) -> float | None:
     if value in {None, "", "None", "nan"}:
         return None
@@ -73,11 +82,12 @@ def _quarters(as_of: str, count: int = 8) -> list[tuple[int, int]]:
     return result
 
 
-def _latest_quality(bs: Any, code: str, as_of: str) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+def _latest_quality(bs: Any, code: str, as_of: str, recorder=None) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
     latest = None
     for year, quarter in _quarters(as_of):
-        profits = _rows(bs.query_profit_data(code=code, year=year, quarter=quarter))
-        cashflows = _rows(bs.query_cash_flow_data(code=code, year=year, quarter=quarter))
+        params = {"code": code, "year": year, "quarter": quarter}
+        profits = _captured_rows(bs.query_profit_data(**params), "query_profit_data", params, recorder)
+        cashflows = _captured_rows(bs.query_cash_flow_data(**params), "query_cash_flow_data", params, recorder)
         for profit in profits:
             if not profit.get("pubDate") or profit["pubDate"] > as_of:
                 continue
@@ -95,7 +105,8 @@ def _latest_quality(bs: Any, code: str, as_of: str) -> tuple[dict[str, Any] | No
     # Early-year snapshots may not yet have the preceding fiscal year's annual
     # filing. Search a wider calendar window without accepting later filings.
     for year in range(pd.Timestamp(as_of).year, pd.Timestamp(as_of).year - 10, -1):
-        for row in _rows(bs.query_profit_data(code=code, year=year, quarter=4)):
+        params = {"code": code, "year": year, "quarter": 4}
+        for row in _captured_rows(bs.query_profit_data(**params), "query_profit_data", params, recorder):
             if row.get("pubDate") and row["pubDate"] <= as_of and _number(row.get("epsTTM")) is not None:
                 annual.append(row)
     annual.sort(key=lambda row: row["statDate"])
@@ -151,12 +162,14 @@ def _price_metrics_from_frame(frame: pd.DataFrame, as_of: str) -> dict[str, Any]
     }
 
 
-def _price_metrics(bs: Any, code: str, as_of: str) -> dict[str, Any]:
+def _price_metrics(bs: Any, code: str, as_of: str, recorder=None) -> dict[str, Any]:
     node = pd.Timestamp(as_of)
     start = str((node - pd.Timedelta(days=550)).date())
-    rows = _rows(bs.query_history_k_data_plus(
+    params = {"code": code, "fields": K_FIELDS, "start_date": start,
+              "end_date": as_of, "frequency": "d", "adjustflag": "2"}
+    rows = _captured_rows(bs.query_history_k_data_plus(
         code, K_FIELDS, start_date=start, end_date=as_of, frequency="d", adjustflag="2"
-    ))
+    ), "query_history_k_data_plus", params, recorder)
     return _price_metrics_from_frame(pd.DataFrame(rows), as_of)
 
 
@@ -170,8 +183,8 @@ def _eps_stability(annual: list[dict[str, Any]]) -> float | None:
     return statistics.stdev(growth) if len(growth) >= 4 else None
 
 
-def _market_trend(bs: Any, as_of: str) -> tuple[str, dict[str, Any]]:
-    data = _price_metrics(bs, "sh.000300", as_of)
+def _market_trend(bs: Any, as_of: str, recorder=None) -> tuple[str, dict[str, Any]]:
+    data = _price_metrics(bs, "sh.000300", as_of, recorder)
     if data["ema200"] is None:
         return "unknown", {"benchmark": "沪深300", "reason": "insufficient history"}
     status = "up" if data["price"] > data["ema200"] else "down"
@@ -185,6 +198,7 @@ def _market_trend(bs: Any, as_of: str) -> tuple[str, dict[str, Any]]:
 def build_a_metrics(
     as_of: str, limit: int = 0, cache_dir: Path | None = None,
     progress: ProgressCallback | None = None,
+    raw_recorder=None,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     """Download one historical CSI 300 snapshot with disclosure-date controls."""
     try:
@@ -201,7 +215,8 @@ def build_a_metrics(
         raise RuntimeError(f"Baostock login failed: {login.error_msg}")
     try:
         report(1, 1, 4, "已连接；正在获取沪深300成分")
-        universe = _rows(bs.query_hs300_stocks(as_of))
+        universe = _captured_rows(bs.query_hs300_stocks(as_of), "query_hs300_stocks",
+                                  {"date": as_of}, raw_recorder)
         if not universe:
             raise ValueError("no verified CSI 300 membership snapshot")
         member_codes = [row["code"] for row in universe]
@@ -210,10 +225,11 @@ def build_a_metrics(
         membership_updates_by_ticker = {row["code"]: row["updateDate"] for row in universe}
         membership_date = max(update_dates)
         report(1, 2, 4, "已获取股票池；正在获取行业")
-        industry_rows = _rows(bs.query_stock_industry(date=as_of))
+        industry_rows = _captured_rows(bs.query_stock_industry(date=as_of), "query_stock_industry",
+                                       {"date": as_of}, raw_recorder)
         industries = {row["code"]: row for row in industry_rows}
         report(1, 3, 4, "已获取行业；正在获取沪深300行情")
-        trend, benchmark = _market_trend(bs, as_of)
+        trend, benchmark = _market_trend(bs, as_of, raw_recorder) if raw_recorder else _market_trend(bs, as_of)
         report(1, 4, 4, "股票池、行业及基准已就绪")
         if limit:
             universe = universe[:limit]
@@ -248,9 +264,11 @@ def build_a_metrics(
                 industry = industries.get(code, {})
                 industry_name = industry.get("industry") or "Unknown"
                 section = industry_name[:1]
-                quality, annual = _latest_quality(bs, code, as_of)
+                quality, annual = (_latest_quality(bs, code, as_of, raw_recorder) if raw_recorder
+                                   else _latest_quality(bs, code, as_of))
                 report(2, position - 1, len(universe), f"{code} 财务查询完成，正在获取行情")
-                price = _price_metrics(bs, code, as_of)
+                price = (_price_metrics(bs, code, as_of, raw_recorder) if raw_recorder
+                         else _price_metrics(bs, code, as_of))
                 if quality is None:
                     raise ValueError("no profit and cash-flow report jointly filed by snapshot")
                 profit, cash = quality["profit"], quality["cash"]
