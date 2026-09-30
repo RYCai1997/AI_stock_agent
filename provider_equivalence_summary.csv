@@ -1,0 +1,10 @@
+signal_date,status,reference_member_count,candidate_member_count,member_overlap_count,semantic_equivalence_verified
+2020-03-16,blocked_by_missing_data_credentials,300,,,False
+2020-07-15,blocked_by_missing_data_credentials,300,,,False
+2021-05-17,blocked_by_missing_data_credentials,300,,,False
+2021-12-15,blocked_by_missing_data_credentials,300,,,False
+2022-05-16,blocked_by_missing_data_credentials,300,,,False
+2022-10-17,blocked_by_missing_data_credentials,300,,,False
+2023-03-15,blocked_by_missing_data_credentials,300,,,False
+2024-05-15,blocked_by_missing_data_credentials,300,,,False
+2025-07-15,blocked_by_missing_data_credentials,300,,,False
