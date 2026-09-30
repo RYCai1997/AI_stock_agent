@@ -1,0 +1,47 @@
+{
+  "schema_version": "1.0.0",
+  "data_provider_version": "tushare_candidate_v1",
+  "date_format": "YYYY-MM-DD",
+  "account_period": ["2020-03-16", "2025-07-31"],
+  "price_warmup_start": "2018-01-01",
+  "fundamental_warmup_start": "2012-01-01",
+  "tables": {
+    "unadjusted_daily": {
+      "key": ["ticker", "date"],
+      "required": ["ticker", "date", "open", "high", "low", "close", "volume", "amount", "pre_close", "source_request_sha256"],
+      "rule": "Never forward-fill an execution price; missing market sessions require dated suspension review."
+    },
+    "adjusted_daily": {
+      "key": ["ticker", "date"],
+      "required": ["ticker", "date", "adjusted_close", "adj_factor", "adjustment_basis", "source_request_sha256"],
+      "rule": "Adjustment direction and corporate-action behavior must match the frozen Baostock adjustflag=2 indicator basis or be declared provider drift."
+    },
+    "fundamental_filings": {
+      "key": ["ticker", "source_endpoint", "statDate", "pubDate", "record_id"],
+      "required": ["ticker", "source_endpoint", "statDate", "pubDate", "record_id", "raw_fields", "source_request_sha256"],
+      "rule": "Only pubDate <= signal_date may enter a snapshot; latest restatement published later remains unavailable earlier."
+    },
+    "membership": {
+      "key": ["index_code", "ticker", "effective_date", "source_request_sha256"],
+      "required": ["index_code", "ticker", "source_trade_date", "effective_date", "source", "source_request_sha256"],
+      "rule": "Use no index_weight trade_date after signal_date; audit interim official adjustments."
+    },
+    "industry": {
+      "key": ["ticker", "effective_from", "source"],
+      "required": ["ticker", "industry_l1", "industry_l2", "effective_from", "effective_to", "taxonomy", "source", "source_request_sha256"],
+      "rule": "Baostock historical taxonomy is the formal reference; other taxonomies require explicit drift."
+    },
+    "security_state": {
+      "key": ["ticker", "date"],
+      "required": ["ticker", "date", "list_date", "delist_date", "listing_status", "is_st", "is_suspended", "tradable", "up_limit", "down_limit", "limit_source", "source_request_sha256"],
+      "rule": "Exact limits take precedence; heuristic limit fallback must be labeled."
+    },
+    "corporate_actions": {
+      "key": ["ticker", "event_id"],
+      "required": ["ticker", "event_id", "kind", "announcement_date", "effective_date", "record_date", "new_share_listing_date", "cash_per_share", "share_ratio", "rights_price", "source", "source_request_sha256"],
+      "rule": "An empty table cannot be marked audited without a complete source coverage proof."
+    }
+  },
+  "snapshot_required": ["signal_date", "data_provider_version", "historical_members", "member_source", "financial_publication_dates", "adjusted_technical_fields", "historical_industry", "security_state", "benchmark", "raw_source_hashes", "coverage_audit"],
+  "completion_rule": "No table or snapshot is considered complete from API success alone; compare expected dates, members, rows and actions against a dated coverage manifest."
+}

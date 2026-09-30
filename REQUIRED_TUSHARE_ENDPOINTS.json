@@ -1,0 +1,33 @@
+{
+  "manifest_version": "1.0.0",
+  "status": "unprobed_no_credentials",
+  "provider": "tushare_pro",
+  "research_account_start": "2020-03-16",
+  "research_account_end": "2025-07-31",
+  "price_collection_start": "2018-01-01",
+  "fundamental_collection_start": "2012-01-01",
+  "requirements": [
+    {"endpoint": "trade_cal", "purpose": "independent calendar check", "priority": "required", "permission_verified": false},
+    {"endpoint": "daily", "purpose": "unadjusted stock OHLC, volume, amount and pre_close", "priority": "required", "permission_verified": false},
+    {"endpoint": "index_daily", "purpose": "CSI300 benchmark OHLC", "priority": "required", "permission_verified": false},
+    {"endpoint": "adj_factor", "purpose": "adjusted indicator history; compare to Baostock adjustflag=2", "priority": "required", "permission_verified": false},
+    {"endpoint": "index_weight", "purpose": "dated CSI300 monthly membership; trade_date must not exceed signal date", "priority": "required", "permission_verified": false},
+    {"endpoint": "income", "purpose": "revenue and EPS filings with ann_date/end_date", "priority": "required", "permission_verified": false},
+    {"endpoint": "cashflow", "purpose": "operating and net cash-flow filings with ann_date/end_date", "priority": "required", "permission_verified": false},
+    {"endpoint": "balancesheet", "purpose": "book equity reconstruction and cross-check", "priority": "required", "permission_verified": false},
+    {"endpoint": "fina_indicator", "purpose": "ROE, cash-flow ratio and EPS candidate crosswalk", "priority": "required", "permission_verified": false},
+    {"endpoint": "daily_basic", "purpose": "PE/PB/cash-flow valuation candidates", "priority": "required", "permission_verified": false},
+    {"endpoint": "suspend_d", "purpose": "dated trading suspension state", "priority": "required", "permission_verified": false},
+    {"endpoint": "stk_limit", "purpose": "exact daily up_limit/down_limit", "priority": "required", "permission_verified": false},
+    {"endpoint": "dividend", "purpose": "cash and stock distributions with announcement/record/ex/pay/listing dates", "priority": "required", "permission_verified": false},
+    {"endpoint": "stock_basic", "purpose": "listing and delisting dates/status", "priority": "required", "permission_verified": false},
+    {"endpoint": "namechange", "purpose": "dated name and ST-context audit", "priority": "required", "permission_verified": false},
+    {"endpoint": "index_member_all", "purpose": "historical industry audit only; never silent replacement of Baostock taxonomy", "priority": "audit_only", "permission_verified": false}
+  ],
+  "supplemental_sources_required": [
+    "CSI official constituent-change announcements including interim adjustments",
+    "exchange/company rights-issue terms and delisting/corporate-action notices if Tushare does not supply all dates and terms",
+    "Baostock date-specific industry responses with preserved raw encoding"
+  ],
+  "rule": "An endpoint name in this manifest is a candidate requirement, not proof of permission, historical depth, field semantics or complete coverage. Probe the token and save raw responses before building snapshots."
+}
