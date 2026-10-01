@@ -27,20 +27,47 @@ class ProspectiveReconciliationTests(unittest.TestCase):
                                  "sources": [{"raw_sha256": sha256(b"x"),
                                               "normalized_sha256": sha256(b"x")}]},
                 signal={"scheduled_signal_date": "2026-10-15", "market_close_verified": True,
-                        "intended_execution_date": [{"ticker": "T0", "date": "2026-10-16"}]},
+                        "intended_execution_date": [
+                            {"ticker": "T0", "date": "2026-10-16", "side": "buy"},
+                            {"ticker": "T1", "date": "2026-10-16", "side": "buy"},
+                            {"ticker": "T2", "date": "2026-10-16", "side": "buy"},
+                            {"ticker": "T3", "date": "2026-10-16", "side": "buy"},
+                            {"ticker": "T4", "date": "2026-10-16", "side": "sell",
+                             "planned_stop": 10},
+                            {"ticker": "T5", "date": "2026-10-16", "side": "sell",
+                             "planned_stop": 10}]},
                 quality={"primary_eligible": True},
                 provenance={"git_commit": "a" * 40, "dirty": False,
                             "working_tree_status": ""})
             original = (prediction / "prediction_record.json").read_bytes()
             output = reconcile_execution(
                 prediction_dir=prediction,
-                observations={"T0": {"date": "2026-10-16", "open": 11,
-                                     "tradable": True, "limit_up": 11, "limit_down": 9}},
+                observations={
+                    "T0": {"date": "2026-10-16", "open": 11,
+                           "tradable": True, "limit_up": 11, "limit_down": 9},
+                    "T1": {"date": "2026-10-16", "open": 10,
+                           "tradable": True, "limit_up": 11, "limit_down": 9},
+                    "T2": {"date": "2026-10-16", "open": 10,
+                           "tradable": False, "limit_up": 11, "limit_down": 9},
+                    "T3": {"date": "2026-10-16", "open": 9,
+                           "tradable": True, "limit_up": 11, "limit_down": 9},
+                    "T4": {"date": "2026-10-16", "open": 9,
+                           "tradable": True, "limit_up": 10, "limit_down": 8},
+                    "T5": {"date": "2026-10-16", "open": 8,
+                           "tradable": True, "limit_up": 10, "limit_down": 8}},
                 source_manifest={"source": "public_fixture", "raw_sha256": sha256(b"bar")},
                 evaluated_at=datetime(2026, 10, 16, 16, tzinfo=ZoneInfo("Asia/Shanghai")),
                 slippage=.001, output_dir=root / "reconciliation")
-            row = json.loads(output.read_text())["observations"][0]
+            rows = json.loads(output.read_text())["observations"]
+            row = rows[0]
             self.assertFalse(row["simulated_fill"])
             self.assertEqual(row["fill_block_reason"], "limit_up_buy_block")
+            self.assertTrue(rows[1]["simulated_fill"])
+            self.assertEqual(rows[2]["fill_block_reason"], "not_tradable")
+            self.assertTrue(rows[3]["simulated_fill"])
+            self.assertTrue(rows[4]["gap_below_stop"])
+            self.assertTrue(rows[4]["simulated_fill"])
+            self.assertAlmostEqual(rows[4]["simulated_execution_price"], 8.991)
+            self.assertEqual(rows[5]["fill_block_reason"], "limit_down_sell_block")
             self.assertEqual((prediction / "prediction_record.json").read_bytes(), original)
             self.assertTrue(verify_prediction(prediction))

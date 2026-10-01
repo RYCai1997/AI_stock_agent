@@ -32,7 +32,8 @@ class PublicSourceArchive:
         self.root = Path(root)
 
     def capture(self, result: SourceResult, *, requested_source: str,
-                fallback_reason: str | None, attempts: list[dict]) -> dict:
+                fallback_reason: str | None, attempts: list[dict],
+                source_selection_reason: str | None = None) -> dict:
         if not result.source or not result.endpoint or not result.parser_version:
             raise ValueError("source, endpoint and parser_version are required")
         if "token" in {str(key).lower() for key in result.parameters}:
@@ -48,6 +49,7 @@ class PublicSourceArchive:
             "archive_schema_version": 1, "data_provider_version": DATA_PROVIDER_VERSION,
             "entry_id": entry_id, "requested_source": requested_source,
             "actual_source": result.source, "fallback_reason": fallback_reason,
+            "source_selection_reason": source_selection_reason,
             "attempts": attempts, "endpoint": result.endpoint,
             "query_parameters": result.parameters, "retrieved_at_utc": stamp,
             "parser_version": result.parser_version,

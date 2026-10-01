@@ -7,6 +7,7 @@ import json
 import tempfile
 from datetime import date, datetime
 from pathlib import Path
+from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -43,21 +44,62 @@ def make_baostock_recorder(archive: PublicSourceArchive, entries: list[dict]):
         requested = {"query_hs300_stocks": "csi_official",
                      "query_profit_data": "cninfo",
                      "query_cash_flow_data": "cninfo"}.get(endpoint, "baostock")
-        fallback_reason = ("no verified machine-readable official parser configured; "
-                           "Baostock public SDK table used") if requested != "baostock" else None
-        attempts = ([{"source": requested, "status": "unavailable",
-                      "reason": "official parser not configured"}] if fallback_reason else [])
+        selection_reason = "official_parser_not_configured" if requested != "baostock" else None
+        attempts = ([{"source": requested, "status": "not_attempted",
+                      "reason": selection_reason}] if selection_reason else [])
         attempts.append({"source": "baostock", "status": "used"})
         metadata = archive.capture(SourceResult("baostock", endpoint, parameters, raw,
                                                normalized, "baostock-sdk-table-v1"),
-                                   requested_source=requested, fallback_reason=fallback_reason,
-                                   attempts=attempts)
+                                   requested_source=requested, fallback_reason=None,
+                                   attempts=attempts,
+                                   source_selection_reason=selection_reason)
         entries.append(metadata)
     return record
 
 
 def _csv_bytes(frame: pd.DataFrame) -> bytes:
     return frame.to_csv(index=False).encode("utf-8")
+
+
+def write_dry_run_diagnostics(*, output_root: Path, signal_date: str,
+                              metrics: pd.DataFrame, provider: dict,
+                              quality: dict, entries: list[dict]) -> Path:
+    """Keep incomplete real-source evidence inspectable without sealing it as prediction."""
+    root = output_root / "retrospective" / "dry_run_diagnostics"
+    target = root / f"{signal_date}_{uuid4().hex}"
+    target.mkdir(parents=True, exist_ok=False)
+    metrics.to_csv(target / "built_metrics.csv", index=False)
+    dates = ("fundamental_as_of", "membership_update_date", "price_as_of")
+    factors = ("roe", "cfo_to_revenue", "eps_growth_std", "earnings_yield",
+               "net_cashflow_yield", "book_to_price")
+    completeness = {}
+    for name, columns in {
+        "financial_publication_dates": (dates[0],),
+        "membership_metadata": (dates[1],),
+        "latest_price": ("price", dates[2]),
+        "qvm_factors": factors,
+        "momentum": ("mom_6_1", "mom_12_1"),
+        "ema200": ("ema200",),
+        "industry": ("industry_l1", "industry_l2"),
+        "security_state": ("tradestatus", "is_st"),
+    }.items():
+        valid = pd.Series(True, index=metrics.index)
+        for column in columns:
+            valid &= metrics[column].notna() if column in metrics else False
+        completeness[name] = {"complete_rows": int(valid.sum()),
+                              "total_built_rows": len(metrics),
+                              "missing_tickers": metrics.loc[~valid, "ticker"].astype(str).tolist()}
+    audit = {"evidence_label": "retrospective_dry_run_diagnostics_not_prediction",
+             "signal_date": signal_date, "original_members": provider.get("original_members"),
+             "requested_members": provider.get("requested_members"),
+             "built_rows": provider.get("built_rows"),
+             "provider_errors": provider.get("errors", {}),
+             "completeness": completeness, "data_quality": quality,
+             "fallback_count": quality["fallback_count"],
+             "source_entries": entries}
+    (target / "audit.json").write_text(json.dumps(audit, ensure_ascii=False, indent=2,
+                                                 default=str), encoding="utf-8")
+    return target
 
 
 def assess_snapshot(metrics: pd.DataFrame, scored: pd.DataFrame, provider: dict,
@@ -101,7 +143,7 @@ def assess_snapshot(metrics: pd.DataFrame, scored: pd.DataFrame, provider: dict,
                 "industry_complete": bool(industries_ok),
                 "cross_source_checks": False}
     fallback_count = sum(item.get("fallback_reason") is not None for item in entries)
-    warnings = ["official CSI/CNINFO parser unavailable; fallback explicitly recorded",
+    warnings = ["official CSI/CNINFO dated parsers not configured; Baostock selected without official request",
                 "corporate-action and cross-source checks incomplete"]
     return assess_quality(coverage, fallback_count, warnings)
 
@@ -129,6 +171,11 @@ def build_from_public_snapshot(*, signal_date: str, generated_at: datetime,
         overheated = return20 is not None and return20 > OFFICIAL_STRATEGY.overheat_return_threshold
         plan = build_portfolio_plan(scored, overheated=overheated)
         quality = assess_snapshot(metrics, scored, provider, signal_date, entries)
+        if decision["evidence_label"] != "prospective":
+            diagnostic_path = write_dry_run_diagnostics(
+                output_root=output_root, signal_date=signal_date,
+                metrics=metrics, provider=provider, quality=quality, entries=entries)
+            print(json.dumps({"dry_run_diagnostics": str(diagnostic_path)}, ensure_ascii=False), flush=True)
         if not quality["primary_eligible"]:
             raise ValueError(f"PUBLIC_V1 fail closed: {quality['missing_core_fields']}")
         dates = sorted(set(sessions))

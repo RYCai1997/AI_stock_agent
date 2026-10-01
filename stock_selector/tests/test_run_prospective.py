@@ -9,12 +9,23 @@ from zoneinfo import ZoneInfo
 
 from data_public.archive import PublicSourceArchive, SourceResult
 from prospective.calendar import signal_day_decision
-from run_prospective import build_from_public_snapshot
+from run_prospective import build_from_public_snapshot, make_baostock_recorder
 from test_selector import sample_frame
 from verify_prediction import verify_prediction
 
 
 class RunProspectiveTests(unittest.TestCase):
+    def test_unconfigured_official_parser_is_not_reported_as_endpoint_failure(self):
+        with tempfile.TemporaryDirectory() as folder:
+            entries = []
+            recorder = make_baostock_recorder(PublicSourceArchive(Path(folder)), entries)
+            recorder("query_hs300_stocks", {"date": "2026-09-30"},
+                     ["code"], [{"code": "sh.600000"}])
+            self.assertIsNone(entries[0]["fallback_reason"])
+            self.assertEqual(entries[0]["source_selection_reason"], "official_parser_not_configured")
+            self.assertEqual(entries[0]["attempts"][0]["status"], "not_attempted")
+            self.assertEqual(entries[0]["attempts"][1]["status"], "used")
+
     def test_public_snapshot_creates_sealed_primary_without_tushare(self):
         date = "2026-10-15"
         now = datetime(2026, 10, 15, 15, 1, tzinfo=ZoneInfo("Asia/Shanghai"))

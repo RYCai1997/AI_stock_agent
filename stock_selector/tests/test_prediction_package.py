@@ -51,10 +51,30 @@ class PredictionPackageTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "clean git"):
                 create_prediction_package(**args)
             path = create_prediction_package(**args, allow_dirty=True)
-            self.assertEqual(json.loads((path / "prediction_record.json").read_text())
-                             ["research_quality"], "degraded")
+            record = json.loads((path / "prediction_record.json").read_text())
+            self.assertEqual(record["research_quality"], "degraded")
+            self.assertEqual(record["evidence_label"], "research_only")
+            self.assertFalse(record["prospective_primary"])
+            self.assertFalse((args["prospective_root"] / "prospective_registry.csv").exists())
         with tempfile.TemporaryDirectory() as folder:
             args = self._kwargs(Path(folder))
             args["generated_at"] = datetime(2027, 1, 20, 16, tzinfo=ZoneInfo("Asia/Shanghai"))
             with self.assertRaisesRegex(ValueError, "cannot be prospective"):
                 create_prediction_package(**args)
+
+    def test_research_date_reruns_never_append_primary_registry(self):
+        with tempfile.TemporaryDirectory() as folder:
+            args = self._kwargs(Path(folder))
+            args["evidence_label"] = "retrospective_reconstruction"
+            args["generated_at"] = datetime(2026, 10, 1, 15, 1,
+                                            tzinfo=ZoneInfo("Asia/Shanghai"))
+            first = create_prediction_package(**args)
+            original = (first / "prediction_record.json").read_bytes()
+            second = create_prediction_package(**args)
+            self.assertNotEqual(first, second)
+            self.assertEqual((first / "prediction_record.json").read_bytes(), original)
+            self.assertTrue(verify_prediction(first))
+            self.assertTrue(verify_prediction(second))
+            self.assertFalse(json.loads((first / "prediction_record.json").read_text())
+                             ["prospective_primary"])
+            self.assertFalse((args["prospective_root"] / "prospective_registry.csv").exists())

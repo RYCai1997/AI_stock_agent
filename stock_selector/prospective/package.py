@@ -116,7 +116,9 @@ def create_prediction_package(*, prospective_root: Path, retrospective_root: Pat
                                                  not item.get("normalized_sha256")
                                                  for item in source_manifest["sources"]):
         raise ValueError("every public source requires raw and normalized hashes")
-    primary = evidence_label == "prospective"
+    # Dirty code may be inspected, but can never create a primary evidence row.
+    dirty_research = bool(provenance.get("dirty") and allow_dirty)
+    primary = evidence_label == "prospective" and not dirty_research
     root = prospective_root if primary else retrospective_root
     dated = root / signal_date
     if primary and dated.exists():
@@ -161,7 +163,8 @@ def create_prediction_package(*, prospective_root: Path, retrospective_root: Pat
                   "git_commit": provenance["git_commit"],
                   "working_tree_status": provenance.get("working_tree_status", ""),
                   "research_quality": "degraded" if provenance.get("dirty") else "normal",
-                  "evidence_label": evidence_label if primary else "retrospective_reconstruction",
+                  "evidence_label": ("research_only" if dirty_research else
+                                     evidence_label if primary else "retrospective_reconstruction"),
                   "prospective_primary": primary, "non_primary_rerun": not primary,
                   "source_manifest_hash": sha256((staging / "source_manifest.json").read_bytes()),
                   "input_hash": _aggregate_hash(files, ("universe.csv", "fundamentals.csv",

@@ -25,8 +25,12 @@ def reconcile_execution(*, prediction_dir: Path, observations: dict[str, dict],
     rows = []
     for target in record["intended_execution_date"]:
         ticker, planned = target["ticker"], target["date"]
+        side = target.get("side", "buy")
+        if side not in {"buy", "sell"}:
+            raise ValueError("invalid sealed execution side")
         obs = observations.get(ticker)
-        base = {"ticker": ticker, "planned_execution_date": planned}
+        base = {"ticker": ticker, "planned_execution_date": planned,
+                "execution_side": side}
         if obs is None:
             rows.append({**base, "simulated_fill": False, "fill_block_reason": "observation_missing"})
             continue
@@ -54,14 +58,20 @@ def reconcile_execution(*, prediction_dir: Path, observations: dict[str, dict],
         elif limit_up is None or limit_down is None:
             reason = "exact_price_limits_missing"
         elif opening >= float(limit_up) - 1e-8:
-            reason = "limit_up_buy_block"
+            reason = "limit_up_buy_block" if side == "buy" else None
+        elif opening <= float(limit_down) + 1e-8 and side == "sell":
+            reason = "limit_down_sell_block"
         else:
             reason = None
+        planned_stop = target.get("planned_stop")
+        gap_below_stop = planned_stop is not None and opening < float(planned_stop)
         rows.append({**base, "observed_date": actual,
                      "actual_market_open": opening, "tradable": tradable,
                      "limit_up": limit_up, "limit_down": limit_down,
+                     "gap_below_stop": gap_below_stop,
                      "simulated_fill": reason is None, "fill_block_reason": reason,
-                     "simulated_execution_price": opening * (1 + slippage) if reason is None else None,
+                     "simulated_execution_price": opening * (1 + slippage if side == "buy" else 1 - slippage)
+                     if reason is None else None,
                      "slippage": slippage})
     result = {"prediction_id": record["prediction_id"],
               "prediction_seal_sha256": sha256((prediction_dir / "prediction_seal.json").read_bytes()),

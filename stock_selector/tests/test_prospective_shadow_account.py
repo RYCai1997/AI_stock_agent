@@ -60,6 +60,15 @@ class ProspectiveShadowAccountTests(unittest.TestCase):
                 actions=[], market_calendar=dates[:2], shadow_dir=shadow_dir,
                 fee_config=FEE)
             self.assertGreater(len(first.account.positions), 0)
+            self.assertEqual(first.daily_nav[0]["cash"], 1000000)
+            self.assertEqual(first.daily_nav[0]["daily_nav"], 1.0)
+            self.assertTrue(first.trades)
+            self.assertTrue(all(trade["actual_execution_date"] == "2026-10-16"
+                                for trade in first.trades))
+            self.assertTrue(all(trade["execution_price"] > 100 for trade in first.trades))
+            self.assertGreater(first.account.fees, 0)
+            self.assertGreater(first.daily_nav[-1]["daily_nav"], 0)
+            self.assertTrue((shadow_dir / "shadow_orders.jsonl").read_text().strip())
             old_nav = (shadow_dir / "shadow_nav.jsonl").read_text(encoding="utf-8")
             november = self._package(root, "2026-11-16")
             second = replay_continuous_shadow(
