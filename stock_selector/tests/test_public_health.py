@@ -20,3 +20,9 @@ class PublicHealthTests(unittest.TestCase):
         report = check_sources(lambda url: (_ for _ in ()).throw(OSError("offline")))
         self.assertTrue(all(item["status"] == "unavailable"
                             for item in report["sources"].values()))
+
+    def test_baostock_available_requires_dated_sdk_parse(self):
+        report = check_sources(lambda _: (200, b"<html>ok</html>"),
+                               probe_baostock=lambda: True)
+        self.assertEqual(report["sources"]["baostock"]["status"], "available")
+        self.assertIn("dated SDK", report["sources"]["baostock"]["reason"])

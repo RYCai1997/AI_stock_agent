@@ -54,6 +54,27 @@ def make_baostock_recorder(archive: PublicSourceArchive, entries: list[dict]):
                                    attempts=attempts,
                                    source_selection_reason=selection_reason)
         entries.append(metadata)
+        return metadata
+    def restore(cached_entries: list[dict]) -> bool:
+        try:
+            valid = bool(cached_entries) and all(archive.verify(entry) for entry in cached_entries)
+        except (OSError, ValueError, KeyError, TypeError):
+            valid = False
+        if not valid:
+            return False
+        for entry in cached_entries:
+            restored = dict(entry)
+            if (restored.get("fallback_reason") == "official_parser_not_configured" and
+                    any(attempt.get("status") == "not_attempted" and
+                        attempt.get("reason") == "official_parser_not_configured"
+                        for attempt in restored.get("attempts", [])) and
+                    not any(attempt.get("status") == "failed" for attempt in restored.get("attempts", []))):
+                restored["fallback_reason"] = None
+                restored["source_selection_reason"] = "official_parser_not_configured"
+                restored["legacy_metadata_corrected"] = True
+            entries.append(restored)
+        return True
+    record.restore = restore
     return record
 
 
@@ -63,7 +84,8 @@ def _csv_bytes(frame: pd.DataFrame) -> bytes:
 
 def write_dry_run_diagnostics(*, output_root: Path, signal_date: str,
                               metrics: pd.DataFrame, provider: dict,
-                              quality: dict, entries: list[dict]) -> Path:
+                              quality: dict, entries: list[dict],
+                              scored: pd.DataFrame | None = None) -> Path:
     """Keep incomplete real-source evidence inspectable without sealing it as prediction."""
     root = output_root / "retrospective" / "dry_run_diagnostics"
     target = root / f"{signal_date}_{uuid4().hex}"
@@ -94,7 +116,19 @@ def write_dry_run_diagnostics(*, output_root: Path, signal_date: str,
              "requested_members": provider.get("requested_members"),
              "built_rows": provider.get("built_rows"),
              "provider_errors": provider.get("errors", {}),
-             "completeness": completeness, "data_quality": quality,
+             "completeness": completeness,
+             "row_status_counts": {name: metrics[name].value_counts(dropna=False).to_dict()
+                                   for name in ("provider_status", "factor_data_status",
+                                                "quality_history_status", "price_status",
+                                                "security_state_status") if name in metrics},
+             "strategy_completeness": ({name: int(scored[name].sum()) for name in
+                                        ("model_supported", "quality_complete", "value_complete",
+                                         "momentum_complete", "security_eligible") if name in scored}
+                                       if scored is not None else {}),
+             "provider_telemetry": {name: provider.get(name) for name in
+                                    ("baostock_login_count", "session_reconnect_count",
+                                     "ticker_retry_count", "retry_by_ticker", "provider_error_count")},
+             "data_quality": quality,
              "fallback_count": quality["fallback_count"],
              "source_entries": entries}
     (target / "audit.json").write_text(json.dumps(audit, ensure_ascii=False, indent=2,
@@ -106,9 +140,16 @@ def assess_snapshot(metrics: pd.DataFrame, scored: pd.DataFrame, provider: dict,
                     signal_date: str, entries: list[dict]) -> dict:
     current = pd.Timestamp(signal_date)
     eligible = scored[scored["security_eligible"] & scored["model_supported"]]
+    momentum_required = scored[scored["value_pass"]]
     factors = ("roe", "cfo_to_revenue", "eps_growth_std", "earnings_yield",
                "net_cashflow_yield", "book_to_price", "mom_6_1", "mom_12_1")
-    factor_ok = bool(len(eligible)) and eligible[list(factors)].notna().all().all()
+    # V1 deliberately excludes an incomplete Quality row from that ranking.
+    # Provider failures and unexplained missing values still fail closed.
+    if "factor_data_status" in metrics:
+        factor_ok = bool(len(eligible)) and metrics["factor_data_status"].isin(
+            ["complete", "structurally_incomplete", "ineligible"]).all()
+    else:
+        factor_ok = bool(len(eligible)) and eligible[list(factors)].notna().all().all()
     def dated(column: str) -> pd.Series:
         return pd.to_datetime(metrics[column], errors="coerce") if column in metrics else pd.Series(
             pd.NaT, index=metrics.index)
@@ -128,7 +169,7 @@ def assess_snapshot(metrics: pd.DataFrame, scored: pd.DataFrame, provider: dict,
     coverage = {"historical_csi300_membership": bool(memberships_ok),
                 "qvm_factors": bool(factor_ok),
                 "financial_publication_dates": bool(publications_ok),
-                "momentum_history": bool(len(eligible)) and eligible[["mom_6_1", "mom_12_1"]].notna().all().all(),
+                "momentum_history": bool(momentum_required[["mom_6_1", "mom_12_1"]].notna().all().all()),
                 "ema200": bool(len(eligible)) and eligible["ema200"].notna().all(),
                 "latest_price": bool(prices_ok and active_prices_today),
                 "security_eligibility": ("tradestatus" in metrics and "is_st" in metrics and
@@ -174,7 +215,8 @@ def build_from_public_snapshot(*, signal_date: str, generated_at: datetime,
         if decision["evidence_label"] != "prospective":
             diagnostic_path = write_dry_run_diagnostics(
                 output_root=output_root, signal_date=signal_date,
-                metrics=metrics, provider=provider, quality=quality, entries=entries)
+                metrics=metrics, provider=provider, quality=quality, entries=entries,
+                scored=scored)
             print(json.dumps({"dry_run_diagnostics": str(diagnostic_path)}, ensure_ascii=False), flush=True)
         if not quality["primary_eligible"]:
             raise ValueError(f"PUBLIC_V1 fail closed: {quality['missing_core_fields']}")
@@ -207,7 +249,11 @@ def build_from_public_snapshot(*, signal_date: str, generated_at: datetime,
         manifest = {"data_provider_version": DATA_PROVIDER_VERSION,
                     "evidence_label": decision["evidence_label"], "signal_date": signal_date,
                     "sources": entries, "fallback_count": quality["fallback_count"],
-                    "coverage": quality}
+                    "coverage": quality,
+                    "provider_telemetry": {name: provider.get(name) for name in
+                                           ("baostock_login_count", "session_reconnect_count",
+                                            "ticker_retry_count", "retry_by_ticker",
+                                            "provider_error_count")}}
         signal = {"scheduled_signal_date": decision.get("scheduled_signal_date"),
                   "market_close_verified": decision["prospective_primary"],
                   "market_state": provider["market_trend"],
@@ -262,7 +308,8 @@ def main() -> None:
     entries.append(metadata)
     all_sessions = sorted(set(sessions + next_sessions))
     recorder = make_baostock_recorder(archive, entries)
-    metrics, provider = build_a_metrics(chosen, raw_recorder=recorder)
+    metrics, provider = build_a_metrics(chosen, cache_dir=args.output_root / "public_row_cache",
+                                        raw_recorder=recorder)
     package = build_from_public_snapshot(signal_date=chosen,
                                          generated_at=datetime.now(ZoneInfo("Asia/Shanghai")),
                                          decision=decision, sessions=all_sessions,

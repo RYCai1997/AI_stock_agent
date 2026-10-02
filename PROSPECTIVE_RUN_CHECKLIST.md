@@ -6,7 +6,7 @@
 
 - [ ] 在项目目录执行 `git pull`，确认使用预定版本。
 - [ ] 执行 `git status --short`，正式 primary 要求输出为空；记录 `git rev-parse HEAD`。
-- [ ] 执行 `python -m unittest discover -s stock_selector/tests`，确认全部通过。
+- [ ] 进入 `stock_selector` 目录执行 `python -m unittest discover -s tests`，确认全部通过，然后返回项目根目录。
 - [ ] 执行 `python stock_selector/check_public_sources.py`；分别判断首页连通性和真正的 dated endpoint / parser，不把 HTTP 200 当作数据有效。
 - [ ] 检查网络、Baostock SDK 实际登录和公开日历查询；核对系统时钟、日期与 `Asia/Shanghai` 时区。
 - [ ] 检查上次 operational dry run 的 300 只覆盖、逐股错误、财报披露日、行业编码、价格与证券状态。若核心项不完整，预期正式运行会 fail closed。

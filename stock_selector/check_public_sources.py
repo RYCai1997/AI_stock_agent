@@ -24,7 +24,23 @@ def _fetch_small(url: str) -> tuple[int, bytes]:
         return response.status, response.read(4096)
 
 
-def check_sources(fetch: Callable[[str], tuple[int, bytes]] = _fetch_small) -> dict:
+def _probe_baostock_dated() -> bool:
+    import baostock as bs
+    login = bs.login()
+    if login.error_code != "0":
+        raise RuntimeError(f"Baostock SDK login failed: {login.error_msg}")
+    try:
+        result = bs.query_trade_dates(start_date="2025-07-15", end_date="2025-07-15")
+        if result.error_code != "0" or not result.next():
+            raise RuntimeError("Baostock dated calendar query failed")
+        row = dict(zip(result.fields, result.get_row_data()))
+        return row.get("calendar_date") == "2025-07-15" and row.get("is_trading_day") == "1"
+    finally:
+        bs.logout()
+
+
+def check_sources(fetch: Callable[[str], tuple[int, bytes]] = _fetch_small,
+                  probe_baostock: Callable[[], bool] | None = None) -> dict:
     status = {}
     for name, (url, kind) in SOURCES.items():
         try:
@@ -41,12 +57,25 @@ def check_sources(fetch: Callable[[str], tuple[int, bytes]] = _fetch_small) -> d
         except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
             state, reason = "unavailable", type(exc).__name__
         status[name] = {"status": state, "reason": reason, "url_identifier": url}
+    if probe_baostock is not None:
+        try:
+            valid = probe_baostock()
+            status["baostock"] = {
+                "status": "available" if valid else "degraded",
+                "reason": ("dated SDK calendar endpoint parsed" if valid else
+                           "dated SDK calendar endpoint returned invalid data"),
+                "url_identifier": "Baostock SDK query_trade_dates(2025-07-15)",
+            }
+        except Exception as exc:
+            status["baostock"] = {"status": "unavailable", "reason": type(exc).__name__,
+                                   "url_identifier": "Baostock SDK query_trade_dates(2025-07-15)"}
     return {"checked_at_utc": datetime.now(timezone.utc).isoformat(),
             "data_provider_version": "PUBLIC_V1", "sources": status}
 
 
 def main() -> None:
-    print(json.dumps(check_sources(), ensure_ascii=False, indent=2))
+    print(json.dumps(check_sources(probe_baostock=_probe_baostock_dated),
+                     ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

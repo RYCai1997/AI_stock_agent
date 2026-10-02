@@ -22,7 +22,12 @@ INDUSTRY_SECTIONS = {
     "M": "M 科研技术服务业", "N": "N 环保公共设施业", "O": "O 居民服务业",
     "P": "P 教育", "Q": "Q 卫生社会工作", "R": "R 文化体育娱乐业", "S": "S 综合",
 }
-CACHE_VERSION = 3
+CACHE_VERSION = 4
+MAX_TICKER_ATTEMPTS = 3
+# Audited code succession: Baostock closes sz.300114 on 2025-02-17 and
+# publishes the continuing issuer as sz.302132. Public annual-report metadata
+# under 302132 independently lists the predecessor's 2020-2023 reports.
+HISTORICAL_CODE_CONTINUITY = {"sz.302132": ("sz.300114", "2025-02-17")}
 K_FIELDS = (
     "date,code,open,high,low,close,volume,amount,turn,tradestatus,pctChg,"
     "peTTM,pbMRQ,psTTM,pcfNcfTTM,isST"
@@ -31,11 +36,30 @@ K_FIELDS = (
 
 def _rows(result: Any) -> list[dict[str, str]]:
     if result.error_code != "0":
-        raise RuntimeError(result.error_msg)
+        raise RuntimeError(f"Baostock {result.error_code}: {result.error_msg}")
     values = []
     while result.next():
         values.append(dict(zip(result.fields, result.get_row_data())))
     return values
+
+
+def _session_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return any(term in message for term in (
+        "10001001", "10002001", "10002002", "10002003", "10002004",
+        "10002005", "10002006", "10002007", "10002008",
+        "用户未登录", "用户未登陆", "not logged in", "session invalid",
+        "session expired", "connection reset", "timeout", "network error"))
+
+
+def _reconnect(bs: Any) -> None:
+    try:
+        bs.logout()
+    except Exception:
+        pass
+    response = bs.login()
+    if response.error_code != "0":
+        raise RuntimeError(f"Baostock reconnect failed: {response.error_msg}")
 
 
 def _captured_rows(result: Any, endpoint: str, parameters: dict,
@@ -66,6 +90,24 @@ def _upgrade_cached_row(payload: dict[str, Any]) -> dict[str, Any] | None:
         row = dict(row)
         row["net_cashflow_yield"] = row.pop("operating_cashflow_yield")
     return row
+
+
+def _cache_sources_match(entries: list[dict], code: str, as_of: str) -> bool:
+    if not isinstance(entries, list) or not all(isinstance(entry, dict) for entry in entries):
+        return False
+    required = {"query_profit_data", "query_cash_flow_data", "query_history_k_data_plus"}
+    seen = set()
+    for entry in entries:
+        params = entry.get("query_parameters", {})
+        permitted = {code}
+        if code in HISTORICAL_CODE_CONTINUITY:
+            permitted.add(HISTORICAL_CODE_CONTINUITY[code][0])
+        if params.get("code") not in permitted:
+            return False
+        if entry.get("endpoint") == "query_history_k_data_plus" and params.get("end_date") != as_of:
+            return False
+        seen.add(entry.get("endpoint"))
+    return required <= seen
 
 
 def _quarters(as_of: str, count: int = 8) -> list[tuple[int, int]]:
@@ -109,6 +151,27 @@ def _latest_quality(bs: Any, code: str, as_of: str, recorder=None) -> tuple[dict
         for row in _captured_rows(bs.query_profit_data(**params), "query_profit_data", params, recorder):
             if row.get("pubDate") and row["pubDate"] <= as_of and _number(row.get("epsTTM")) is not None:
                 annual.append(row)
+    if len(annual) < 5 and code in HISTORICAL_CODE_CONTINUITY:
+        prior_code, last_date = HISTORICAL_CODE_CONTINUITY[code]
+        if as_of > last_date:
+            old_params, new_params = {"code": prior_code}, {"code": code}
+            old_basic = _captured_rows(bs.query_stock_basic(**old_params),
+                                       "query_stock_basic", old_params, recorder)
+            new_basic = _captured_rows(bs.query_stock_basic(**new_params),
+                                       "query_stock_basic", new_params, recorder)
+            if (len(old_basic) != 1 or len(new_basic) != 1 or
+                    old_basic[0].get("outDate") != last_date or
+                    old_basic[0].get("ipoDate") != new_basic[0].get("ipoDate")):
+                raise ValueError(f"historical code continuity unverified: {prior_code} -> {code}")
+            existing = {row["statDate"] for row in annual}
+            for year in range(pd.Timestamp(as_of).year - 10, int(last_date[:4])):
+                params = {"code": prior_code, "year": year, "quarter": 4}
+                for row in _captured_rows(bs.query_profit_data(**params),
+                                          "query_profit_data", params, recorder):
+                    if (row.get("statDate") not in existing and row.get("pubDate") and
+                            row["pubDate"] <= as_of and _number(row.get("epsTTM")) is not None):
+                        annual.append(row)
+                        existing.add(row["statDate"])
     annual.sort(key=lambda row: row["statDate"])
     return latest, annual[-6:]
 
@@ -213,6 +276,9 @@ def build_a_metrics(
     login = bs.login()
     if login.error_code != "0":
         raise RuntimeError(f"Baostock login failed: {login.error_msg}")
+    login_count = 1
+    reconnect_count = 0
+    retry_by_ticker: dict[str, int] = {}
     try:
         report(1, 1, 4, "已连接；正在获取沪深300成分")
         universe = _captured_rows(bs.query_hs300_stocks(as_of), "query_hs300_stocks",
@@ -241,16 +307,27 @@ def build_a_metrics(
             report(2, position - 1, len(universe), f"正在处理 {code} {item['code_name']}")
             cache_path = cache_dir / f"{as_of}_{code}.json" if cache_dir else None
             if cache_path and cache_path.exists():
-                cached = json.loads(cache_path.read_text(encoding="utf-8"))
-                if cached.get("cache_version") in {1, 2, CACHE_VERSION} and cached.get("as_of") == as_of:
+                try:
+                    cached = json.loads(cache_path.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    cached = {}
+                if cached.get("cache_version") in {1, 2, 3, CACHE_VERSION} and cached.get("as_of") == as_of:
                     cached_row = _upgrade_cached_row(cached)
                     legacy_missing_stability = (
                         cached.get("cache_version") < CACHE_VERSION
                         and cached_row is not None
                         and cached_row.get("eps_growth_std") is None
                     )
-                    if (cached_row and not legacy_missing_stability
-                            and cached_row.get("price_as_of") == benchmark.get("price_as_of")):
+                    row_ok = (cached_row and not legacy_missing_stability and
+                              cached_row.get("ticker") == code and
+                              cached_row.get("factor_data_status") != "suspicious_missing" and
+                              cached_row.get("price_as_of") == benchmark.get("price_as_of"))
+                    provenance_ok = (raw_recorder is None or
+                                     (row_ok and cached.get("cache_version") == CACHE_VERSION and
+                                      _cache_sources_match(cached.get("source_entries", []), code, as_of) and
+                                      callable(getattr(raw_recorder, "restore", None)) and
+                                      raw_recorder.restore(cached.get("source_entries", []))))
+                    if row_ok and provenance_ok:
                         cached_row["membership_update_date"] = item["updateDate"]
                         cache_hits += 1
                         output.append(cached_row)
@@ -264,13 +341,44 @@ def build_a_metrics(
                 industry = industries.get(code, {})
                 industry_name = industry.get("industry") or "Unknown"
                 section = industry_name[:1]
-                quality, annual = (_latest_quality(bs, code, as_of, raw_recorder) if raw_recorder
-                                   else _latest_quality(bs, code, as_of))
-                report(2, position - 1, len(universe), f"{code} 财务查询完成，正在获取行情")
-                price = (_price_metrics(bs, code, as_of, raw_recorder) if raw_recorder
-                         else _price_metrics(bs, code, as_of))
-                if quality is None:
-                    raise ValueError("no profit and cash-flow report jointly filed by snapshot")
+                for attempt in range(MAX_TICKER_ATTEMPTS):
+                    # Capture SDK tables only after the whole ticker succeeds. A failed
+                    # attempt must never contribute half a ticker to the final manifest.
+                    pending: list[tuple] = []
+                    recorder = (lambda *parts: pending.append(parts)) if raw_recorder else None
+                    try:
+                        quality, annual = _latest_quality(bs, code, as_of, recorder)
+                        report(2, position - 1, len(universe), f"{code} 财务查询完成，正在获取行情")
+                        price = _price_metrics(bs, code, as_of, recorder)
+                        if quality is None:
+                            raise ValueError("no profit and cash-flow report jointly filed by snapshot")
+                        history_status = "complete"
+                        listing_date = None
+                        if len(annual) < 5:
+                            params = {"code": code}
+                            basics = _captured_rows(bs.query_stock_basic(**params),
+                                                    "query_stock_basic", params, recorder)
+                            listing_date = basics[0].get("ipoDate") if len(basics) == 1 else None
+                            latest_expected = (pd.Timestamp(as_of).year -
+                                               (1 if pd.Timestamp(as_of).month >= 5 else 2))
+                            expected = set(range(pd.Timestamp(listing_date).year - 1,
+                                                 latest_expected + 1)) if listing_date else set()
+                            observed = {pd.Timestamp(item["statDate"]).year for item in annual}
+                            history_status = ("insufficient_history" if listing_date and
+                                              listing_date <= as_of and expected <= observed
+                                              else "suspicious_missing")
+                        break
+                    except Exception as exc:
+                        if not _session_error(exc) or attempt + 1 == MAX_TICKER_ATTEMPTS:
+                            raise
+                        retry_by_ticker[code] = retry_by_ticker.get(code, 0) + 1
+                        _reconnect(bs)
+                        login_count += 1
+                        reconnect_count += 1
+                source_entries = []
+                if raw_recorder:
+                    for parts in pending:
+                        source_entries.append(raw_recorder(*parts))
                 profit, cash = quality["profit"], quality["cash"]
                 filing_date = max(
                     [profit["pubDate"], cash["pubDate"]] + [row["pubDate"] for row in annual]
@@ -286,16 +394,38 @@ def build_a_metrics(
                     "roe": _number(profit.get("roeAvg")),
                     "cfo_to_revenue": _number(cash.get("CFOToOR")),
                     "eps_growth_std": _eps_stability(annual),
+                    "annual_eps_observations": len(annual),
+                    "annual_eps_growth_observations": max(0, len(annual) - 1),
+                    "eps_history_source_codes": sorted({item.get("code", code) for item in annual}),
+                    "eps_stability_status": history_status,
+                    "listing_date": listing_date,
+                    "provider_status": "complete",
+                    "quality_history_status": history_status,
+                    "price_status": "current" if price["price_as_of"] == as_of else "stale",
+                    "security_state_status": "complete" if price["tradestatus"] in {"0", "1"} and price["is_st"] in {"0", "1"} else "unknown",
                     "relative_strength": np.nan,
                     "security_eligible": price["tradestatus"] == "1" and price["is_st"] != "1",
                     **price,
                 }
+                other_factors = ("roe", "cfo_to_revenue", "earnings_yield",
+                                 "net_cashflow_yield", "book_to_price")
+                if not row["security_eligible"] or section == "J":
+                    row["factor_data_status"] = "ineligible"
+                elif any(row[name] is None for name in other_factors):
+                    row["factor_data_status"] = "suspicious_missing"
+                elif row["eps_growth_std"] is not None:
+                    row["factor_data_status"] = "complete"
+                elif history_status == "insufficient_history":
+                    row["factor_data_status"] = "structurally_incomplete"
+                else:
+                    row["factor_data_status"] = "suspicious_missing"
                 output.append(row)
-                cache_payload = {"cache_version": CACHE_VERSION, "as_of": as_of, "row": row}
+                cache_payload = {"cache_version": CACHE_VERSION, "as_of": as_of,
+                                 "row": row, "source_entries": source_entries}
             except Exception as exc:
                 errors[code] = str(exc)
-                cache_payload = {"cache_version": CACHE_VERSION, "as_of": as_of, "error": str(exc)}
-            if cache_path:
+                cache_payload = None
+            if cache_path and cache_payload is not None:
                 cache_path.parent.mkdir(parents=True, exist_ok=True)
                 temporary = cache_path.with_suffix(".json.tmp")
                 temporary.write_text(json.dumps(cache_payload, ensure_ascii=False), encoding="utf-8")
@@ -321,6 +451,11 @@ def build_a_metrics(
             "member_codes": member_codes,
             "requested_members": len(universe), "built_rows": len(frame), "errors": errors,
             "cache_hits": cache_hits, "market_trend": trend,
+            "baostock_login_count": login_count,
+            "session_reconnect_count": reconnect_count,
+            "ticker_retry_count": sum(retry_by_ticker.values()),
+            "retry_by_ticker": retry_by_ticker,
+            "provider_error_count": len(errors),
             "benchmark": benchmark,
             "factor_policy": (
                 "ROE + CFO/revenue + EPS stability; PE/price-to-net-cash-flow/PB inverted; "

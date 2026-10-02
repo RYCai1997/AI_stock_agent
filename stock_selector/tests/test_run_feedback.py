@@ -89,11 +89,14 @@ class FeedbackTests(unittest.TestCase):
         quality = {"profit": {"pubDate": "2025-04-01", "roeAvg": ".1"},
                    "cash": {"pubDate": "2025-04-01", "CFOToOR": ".1"},
                    "statDate": "2025-03-31"}
-        price = {"price_as_of": "2025-07-15", "mom_12_1": .2, "tradestatus": "1", "is_st": "0"}
+        price = {"price_as_of": "2025-07-15", "mom_12_1": .2, "tradestatus": "1", "is_st": "0",
+                 "earnings_yield": .1, "net_cashflow_yield": .1, "book_to_price": .1}
         with tempfile.TemporaryDirectory() as folder, patch.dict(sys.modules, {"baostock": bs}), \
                 patch("selector.providers.a_baostock._rows", side_effect=lambda rows: rows), \
                 patch("selector.providers.a_baostock._market_trend", return_value=("up", {"price_as_of": "2025-07-15"})), \
-                patch("selector.providers.a_baostock._latest_quality", side_effect=[(quality, []), RuntimeError("offline")]), \
+                patch("selector.providers.a_baostock._latest_quality", side_effect=[
+                    (quality, [{"statDate": f"{year}-12-31", "epsTTM": "1", "pubDate": "2025-04-01"}
+                               for year in range(2020, 2025)]), RuntimeError("offline")]), \
                 patch("selector.providers.a_baostock._price_metrics", return_value=price):
             (Path(folder) / "2025-07-15_sh.600000.json").write_text(json.dumps({
                 "cache_version": 3, "as_of": "2025-07-15", "row": cached}), encoding="utf-8")
